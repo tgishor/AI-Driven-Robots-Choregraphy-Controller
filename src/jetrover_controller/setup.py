@@ -29,7 +29,10 @@ setup(
                 'enhanced_dance = jetrover_controller.enhanced_dance:main',
                 'gui = jetrover_controller.control_gui:main',
                 'keyboard = jetrover_controller.keyboard:main',
-                'robot_sync = jetrover_controller.robot_synchronizer:main'
+                'robot_sync = jetrover_controller.robot_synchronizer:main',
+                'multi_arm = jetrover_controller.multi_robot_arm_controller:main',
+                'arm_sync = jetrover_controller.arm_synchronizer:main',
+                'arm_keyboard = jetrover_controller.arm_keyboard:main'
         ],
     },
 )

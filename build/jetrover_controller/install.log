@@ -1,3 +1,4 @@
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/arm_keyboard.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/enhanced_dance.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/buzzer_stop.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/move_arm (copy).py
@@ -8,12 +9,15 @@
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/keyboard.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/move_robot.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/move_robot copy.py
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/multi_robot_arm_controller.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/resource.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/web.py
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/arm_synchronizer.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__init__.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/control_gui.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/robot_manager.py
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/dance_attempt.py
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/arm_keyboard.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/enhanced_dance.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/buzzer_stop.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/move_arm (copy).cpython-310.pyc
@@ -24,8 +28,10 @@
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/keyboard.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/move_robot.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/move_robot copy.cpython-310.pyc
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/multi_robot_arm_controller.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/resource.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/web.cpython-310.pyc
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/arm_synchronizer.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/__init__.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/control_gui.cpython-310.pyc
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/__pycache__/robot_manager.cpython-310.pyc
@@ -39,6 +45,8 @@
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller-0.0.0-py3.10.egg-info/zip-safe
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller-0.0.0-py3.10.egg-info/entry_points.txt
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller-0.0.0-py3.10.egg-info/SOURCES.txt
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/arm_keyboard
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/arm_sync
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/buzzer_stop
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/dance_attempt
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/enhanced_dance
@@ -47,5 +55,6 @@
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/lidar_safety
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/move_arm
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/move_robot
+/home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/multi_arm
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/robo_manager
 /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller/robot_sync

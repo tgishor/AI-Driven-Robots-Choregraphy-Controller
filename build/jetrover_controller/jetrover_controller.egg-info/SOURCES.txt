@@ -9,6 +9,8 @@ setup.py
 ../../build/jetrover_controller/jetrover_controller.egg-info/top_level.txt
 ../../build/jetrover_controller/jetrover_controller.egg-info/zip-safe
 jetrover_controller/__init__.py
+jetrover_controller/arm_keyboard.py
+jetrover_controller/arm_synchronizer.py
 jetrover_controller/buzzer_stop.py
 jetrover_controller/control_gui.py
 jetrover_controller/dance_attempt.py
@@ -19,6 +21,7 @@ jetrover_controller/move_arm (copy).py
 jetrover_controller/move_arm.py
 jetrover_controller/move_robot copy.py
 jetrover_controller/move_robot.py
+jetrover_controller/multi_robot_arm_controller.py
 jetrover_controller/resource.py
 jetrover_controller/robot_manager.py
 jetrover_controller/robot_sync.py

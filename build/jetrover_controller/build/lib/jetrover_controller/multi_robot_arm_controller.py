@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from servo_controller_msgs.msg import ServosPosition, ServoPosition
@@ -5,13 +6,13 @@ from servo_controller_msgs.msg import ServoStateList
 import time
 import sys
 
-class ArmController(Node):
+class MultiRobotArmController(Node):
 
     def __init__(self, robot_namespace=''):
         # Create unique node name with namespace
-        node_name = 'arm_controller'
+        node_name = 'multi_robot_arm_controller'
         if robot_namespace:
-            node_name = f'arm_controller_{robot_namespace}'
+            node_name = f'multi_robot_arm_controller_{robot_namespace}'
             
         super().__init__(node_name)
         
@@ -36,7 +37,7 @@ class ArmController(Node):
             10
         )
         
-        print("🦾 Arm Controller")
+        print("🦾 Multi-Robot Arm Controller")
         if robot_namespace:
             print(f"🏷️  Controlling Robot: {robot_namespace}")
         print(f"📤 Publishing to: {servo_controller_topic}")
@@ -61,7 +62,7 @@ class ArmController(Node):
                 return False
             if abs(current - target) > tolerance:
                 return False
-            return True
+        return True
 
     def move_arm(self, duration_ms=1000, **servo_positions):
         """
@@ -107,7 +108,64 @@ class ArmController(Node):
             joint5=500,
             gripper=750
         )
-   
+
+    def demo_sequence(self):
+        """Run a demo sequence of arm movements"""
+        self.get_logger().info("🎬 Starting demo sequence...")
+        
+        # Position 1: Default/Home position
+        self.get_logger().info("📍 Moving to home position...")
+        self.move_arm(
+            duration_ms=2000,
+            joint1=500,
+            joint2=500,
+            joint3=500,
+            joint4=500,
+            joint5=500,
+            gripper=750
+        )
+        time.sleep(3)
+        
+        # Position 2: Extended position
+        self.get_logger().info("📍 Moving to extended position...")
+        self.move_arm(
+            duration_ms=2000,
+            joint1=300,
+            joint2=200,
+            joint3=200,
+            joint4=200,
+            joint5=300,
+            gripper=400
+        )
+        time.sleep(3)
+        
+        # Position 3: Reach up
+        self.get_logger().info("📍 Reaching up...")
+        self.move_arm(
+            duration_ms=2000,
+            joint1=500,
+            joint2=700,
+            joint3=700,
+            joint4=700,
+            joint5=600,
+            gripper=600
+        )
+        time.sleep(3)
+        
+        # Position 4: Back to home
+        self.get_logger().info("📍 Returning to home...")
+        self.move_arm(
+            duration_ms=2000,
+            joint1=500,
+            joint2=500,
+            joint3=500,
+            joint4=500,
+            joint5=500,
+            gripper=750
+        )
+        
+        self.get_logger().info("✅ Demo sequence completed!")
+
 def main(args=None):
     rclpy.init(args=args)
     
@@ -123,28 +181,20 @@ def main(args=None):
         except (ValueError, IndexError):
             pass
     
-    node = ArmController(robot_namespace)
+    node = MultiRobotArmController(robot_namespace)
     time.sleep(1.0)
-    # node.demo_move()
-    # node.move_arm(duration_ms=5000, joint4=700, gripper=750)
     
-    # Looping in main: alternate joint4 position between 300 and 700, for example.
-    toggle = True
     try:
-        while rclpy.ok():
-            if toggle:
-                node.move_arm(duration_ms=1500, joint5=250, joint4=300, joint3=250, gripper=250)
-            else:
-                node.move_arm(duration_ms=1500, joint5=750, joint4=700, joint3=750, gripper=750)
-            toggle = not toggle
-            # Let the node process callbacks and sleep between moves
-            rclpy.spin_once(node, timeout_sec=1.5)
-    except KeyboardInterrupt:
-        pass
+        # Run demo sequence once
+        node.demo_sequence()
         
-    rclpy.shutdown()
-
+        # Keep node alive for manual control if needed
+        rclpy.spin(node)
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Stopping Multi-Robot Arm Controller...")
+    finally:
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-

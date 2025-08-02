@@ -3,22 +3,44 @@ from rclpy.node import Node
 from servo_controller_msgs.msg import ServosPosition, ServoPosition
 from servo_controller_msgs.msg import ServoStateList
 import time
+import sys
 
 class ArmController(Node):
 
-    def __init__(self):
-        super().__init__('arm_controller')
-        self.publisher_ = self.create_publisher(ServosPosition, 'servo_controller', 10)
+    def __init__(self, robot_namespace=''):
+        # Create unique node name with namespace
+        node_name = 'arm_controller'
+        if robot_namespace:
+            node_name = f'arm_controller_{robot_namespace}'
+            
+        super().__init__(node_name)
+        
+        # Build topic names with namespace
+        if robot_namespace:
+            servo_controller_topic = f'/{robot_namespace}/servo_controller'
+            servo_states_topic = f'/{robot_namespace}/controller_manager/servo_states'
+        else:
+            servo_controller_topic = 'servo_controller'
+            servo_states_topic = '/servo_states'
+            
+        self.publisher_ = self.create_publisher(ServosPosition, servo_controller_topic, 10)
+        self.robot_namespace = robot_namespace
 
         self.current_pose = {}
         self.pose_received = False
 
         self.create_subscription(
             ServoStateList,
-            '/servo_states',
+            servo_states_topic,
             self.servo_state_callback,
             10
         )
+        
+        print("🦾 Arm Controller")
+        if robot_namespace:
+            print(f"🏷️  Controlling Robot: {robot_namespace}")
+        print(f"📤 Publishing to: {servo_controller_topic}")
+        print(f"📥 Listening to: {servo_states_topic}")
 
     def servo_state_callback(self, msg):
         for servo in msg.servo_state:
@@ -40,8 +62,6 @@ class ArmController(Node):
             if abs(current - target) > tolerance:
                 return False
             return True
-
-        
 
     def move_arm(self, duration_ms=1000, **servo_positions):
         """
@@ -90,7 +110,20 @@ class ArmController(Node):
    
 def main(args=None):
     rclpy.init(args=args)
-    node = ArmController()
+    
+    # Parse remaining arguments for robot namespace
+    robot_namespace = ''
+    
+    # Simple argument parsing for --robot
+    if '--robot' in sys.argv:
+        try:
+            robot_idx = sys.argv.index('--robot')
+            if robot_idx + 1 < len(sys.argv):
+                robot_namespace = sys.argv[robot_idx + 1]
+        except (ValueError, IndexError):
+            pass
+    
+    node = ArmController(robot_namespace)
     time.sleep(1.0)
     # node.demo_move()
     # node.move_arm(duration_ms=5000, joint4=700, gripper=750)

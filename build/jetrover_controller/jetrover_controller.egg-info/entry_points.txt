@@ -1,4 +1,6 @@
 [console_scripts]
+arm_keyboard = jetrover_controller.arm_keyboard:main
+arm_sync = jetrover_controller.arm_synchronizer:main
 buzzer_stop = jetrover_controller.buzzer_stop:main
 dance_attempt = jetrover_controller.dance_attempt:main
 enhanced_dance = jetrover_controller.enhanced_dance:main
@@ -7,5 +9,6 @@ keyboard = jetrover_controller.keyboard:main
 lidar_safety = jetrover_controller.lidar_safety:main
 move_arm = jetrover_controller.move_arm:main
 move_robot = jetrover_controller.move_robot:main
+multi_arm = jetrover_controller.multi_robot_arm_controller:main
 robo_manager = jetrover_controller.robot_manager:main
 robot_sync = jetrover_controller.robot_synchronizer:main
