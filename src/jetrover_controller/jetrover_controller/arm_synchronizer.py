@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from servo_controller_msgs.msg import ServosPosition
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import sys
 
 class ArmSynchronizer(Node):
@@ -11,13 +12,20 @@ class ArmSynchronizer(Node):
         self.leader_robot = leader_robot
         self.follower_robot = follower_robot
         
+        # Real-time QoS for minimal latency
+        realtime_qos = QoSProfile(
+            depth=1,  # Keep only latest message
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,  # Don't wait for acks
+            history=QoSHistoryPolicy.KEEP_LAST  # Replace old messages immediately
+        )
+        
         # Subscribe to leader robot's servo commands
         leader_topic = f'/{leader_robot}/servo_controller'
         self.subscriber_ = self.create_subscription(
             ServosPosition, 
             leader_topic,
             self.servo_command_callback, 
-            10
+            realtime_qos
         )
         
         # Publish to follower robot's servo controller
@@ -25,7 +33,7 @@ class ArmSynchronizer(Node):
         self.publisher_ = self.create_publisher(
             ServosPosition, 
             follower_topic,
-            10
+            realtime_qos
         )
         
         self.get_logger().info("🦾 Arm Synchronizer started!")

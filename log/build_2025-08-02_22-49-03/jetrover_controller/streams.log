@@ -1,0 +1,59 @@
+[2.852s] Invoking command in '/home/ubuntu/axy_proj/src/jetrover_controller': PYTHONPATH=/home/ubuntu/axy_proj/build/jetrover_controller/prefix_override:/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base ../../build/jetrover_controller build --build-base /home/ubuntu/axy_proj/build/jetrover_controller/build install --record /home/ubuntu/axy_proj/build/jetrover_controller/install.log --single-version-externally-managed install_data
+[3.655s] running egg_info
+[3.698s] writing ../../build/jetrover_controller/jetrover_controller.egg-info/PKG-INFO
+[3.699s] writing dependency_links to ../../build/jetrover_controller/jetrover_controller.egg-info/dependency_links.txt
+[3.700s] writing entry points to ../../build/jetrover_controller/jetrover_controller.egg-info/entry_points.txt
+[3.700s] writing requirements to ../../build/jetrover_controller/jetrover_controller.egg-info/requires.txt
+[3.701s] writing top-level names to ../../build/jetrover_controller/jetrover_controller.egg-info/top_level.txt
+[3.792s] reading manifest file '../../build/jetrover_controller/jetrover_controller.egg-info/SOURCES.txt'
+[3.794s] writing manifest file '../../build/jetrover_controller/jetrover_controller.egg-info/SOURCES.txt'
+[3.794s] running build
+[3.794s] running build_py
+[3.795s] copying jetrover_controller/arm_keyboard.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.795s] copying jetrover_controller/enhanced_dance.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.796s] copying jetrover_controller/buzzer_stop.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.796s] copying jetrover_controller/move_arm (copy).py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.797s] copying jetrover_controller/robot_synchronizer.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.797s] copying jetrover_controller/lidar_safety.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.797s] copying jetrover_controller/robot_sync.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.798s] copying jetrover_controller/move_arm.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.798s] copying jetrover_controller/keyboard.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.799s] copying jetrover_controller/move_robot.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.799s] copying jetrover_controller/move_robot copy.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.799s] copying jetrover_controller/multi_robot_arm_controller.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.800s] copying jetrover_controller/resource.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.800s] copying jetrover_controller/web.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.800s] copying jetrover_controller/arm_synchronizer.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.801s] copying jetrover_controller/__init__.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.801s] copying jetrover_controller/control_gui.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.802s] copying jetrover_controller/robot_manager.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.802s] copying jetrover_controller/dance_attempt.py -> /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller
+[3.803s] running install
+[3.816s] running install_lib
+[3.861s] copying /home/ubuntu/axy_proj/build/jetrover_controller/build/lib/jetrover_controller/keyboard.py -> /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller
+[3.864s] byte-compiling /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/arm_keyboard.py to arm_keyboard.cpython-310.pyc
+[3.869s] byte-compiling /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/move_arm.py to move_arm.cpython-310.pyc
+[3.871s] byte-compiling /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/multi_robot_arm_controller.py to multi_robot_arm_controller.cpython-310.pyc
+[3.873s] byte-compiling /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller/arm_synchronizer.py to arm_synchronizer.cpython-310.pyc
+[3.875s] running install_data
+[3.875s] copying resource/jetrover_controller -> /home/ubuntu/axy_proj/install/jetrover_controller/share/ament_index/resource_index/packages
+[3.875s] copying package.xml -> /home/ubuntu/axy_proj/install/jetrover_controller/share/jetrover_controller
+[3.876s] running install_egg_info
+[3.924s] removing '/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller-0.0.0-py3.10.egg-info' (and everything under it)
+[3.925s] Copying ../../build/jetrover_controller/jetrover_controller.egg-info to /home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages/jetrover_controller-0.0.0-py3.10.egg-info
+[3.927s] running install_scripts
+[4.319s] Installing arm_keyboard script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.319s] Installing arm_sync script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.319s] Installing buzzer_stop script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.320s] Installing dance_attempt script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.320s] Installing enhanced_dance script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.320s] Installing gui script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.321s] Installing keyboard script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.321s] Installing lidar_safety script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.321s] Installing move_arm script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.322s] Installing move_robot script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.322s] Installing multi_arm script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.322s] Installing robo_manager script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.322s] Installing robot_sync script to /home/ubuntu/axy_proj/install/jetrover_controller/lib/jetrover_controller
+[4.324s] writing list of installed files to '/home/ubuntu/axy_proj/build/jetrover_controller/install.log'
+[4.427s] Invoked command in '/home/ubuntu/axy_proj/src/jetrover_controller' returned '0': PYTHONPATH=/home/ubuntu/axy_proj/build/jetrover_controller/prefix_override:/home/ubuntu/axy_proj/install/jetrover_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated setup.py egg_info --egg-base ../../build/jetrover_controller build --build-base /home/ubuntu/axy_proj/build/jetrover_controller/build install --record /home/ubuntu/axy_proj/build/jetrover_controller/install.log --single-version-externally-managed install_data

@@ -18,13 +18,13 @@ class RobotSynchronizer(Node):
         # Publish to local robot's controller
         self.publisher_ = self.create_publisher(
             Twist, 
-            'controller/cmd_vel',  # Publish to local robot
+            '/robot2/controller/cmd_vel',  # Publish to local robot
             10
         )
         
         self.get_logger().info("🤖 Robot Follower started!")
-        self.get_logger().info("  → Listening to: /robot1/controller/cmd_vel")
-        self.get_logger().info("  → Publishing to: controller/cmd_vel (local)")
+        self.get_logger().info("  → Listening to:  /robot1/controller/cmd_vel")
+        self.get_logger().info("  → Publishing to: /robot2/controller/cmd_vel (local)")
         
     def cmd_vel_callback(self, msg):
         """Copy Robot 1's commands to this robot"""
