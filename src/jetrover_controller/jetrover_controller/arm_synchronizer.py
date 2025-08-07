@@ -12,10 +12,10 @@ class ArmSynchronizer(Node):
         self.leader_robot = leader_robot
         self.follower_robot = follower_robot
         
-        # Real-time QoS for minimal latency
+        # Real-time QoS for minimal latency - compatible with existing subscribers
         realtime_qos = QoSProfile(
             depth=1,  # Keep only latest message
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,  # Don't wait for acks
+            reliability=QoSReliabilityPolicy.RELIABLE,  # Match subscriber expectations
             history=QoSHistoryPolicy.KEEP_LAST  # Replace old messages immediately
         )
         

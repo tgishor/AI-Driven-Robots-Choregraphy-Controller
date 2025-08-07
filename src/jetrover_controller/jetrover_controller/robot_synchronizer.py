@@ -9,10 +9,10 @@ class RobotSynchronizer(Node):
     def __init__(self):
         super().__init__('robot_synchronizer')
         
-        # Real-time QoS for minimal latency
+        # Real-time QoS for minimal latency - compatible with existing subscribers
         realtime_qos = QoSProfile(
             depth=1,  # Keep only latest message
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,  # Don't wait for acks
+            reliability=QoSReliabilityPolicy.RELIABLE,  # Match subscriber expectations
             history=QoSHistoryPolicy.KEEP_LAST  # Replace old messages immediately
         )
         
@@ -31,10 +31,8 @@ class RobotSynchronizer(Node):
             realtime_qos
         )
         
-        # Latency tracking
-        self.last_cmd_time = time.time()
-        self.latency_samples = []
-        self.max_samples = 100
+        # Command timing tracking
+        # Note: last_cmd_time will be set on first command
         
         self.get_logger().info("🤖 Robot Follower started!")
         self.get_logger().info("  → Listening to:  /robot1/controller/cmd_vel")
@@ -43,27 +41,27 @@ class RobotSynchronizer(Node):
         
     def cmd_vel_callback(self, msg):
         """Copy Robot 1's commands to this robot"""
-        current_time = time.time()
+        receive_time = time.time()
         
-        # Calculate processing latency (time since last command)
-        processing_latency = current_time - self.last_cmd_time
-        self.last_cmd_time = current_time
-        
-        # Track latency samples
-        if len(self.latency_samples) >= self.max_samples:
-            self.latency_samples.pop(0)
-        self.latency_samples.append(processing_latency)
-        
-        # Forward the exact same command to local robot (ASAP)
+        # Forward the exact same command to local robot (ASAP - minimize delay)
         self.publisher_.publish(msg)
         
-        # Movement logging with latency info
+        # Calculate time gap between commands (not latency)
+        time_gap = receive_time - self.last_cmd_time if hasattr(self, 'last_cmd_time') else 0
+        self.last_cmd_time = receive_time
+        
+        # Movement logging with timing info
         if msg.linear.x != 0 or msg.linear.y != 0 or msg.angular.z != 0:
-            avg_latency = sum(self.latency_samples) / len(self.latency_samples) * 1000
-            self.get_logger().info(
-                f"Following: {msg.linear.x:.2f}, {msg.linear.y:.2f}, {msg.angular.z:.2f} "
-                f"(latency: {processing_latency*1000:.1f}ms, avg: {avg_latency:.1f}ms)"
-            )
+            if time_gap < 1.0:  # Only log if reasonable gap (< 1 second)
+                self.get_logger().info(
+                    f"Following: {msg.linear.x:.2f}, {msg.linear.y:.2f}, {msg.angular.z:.2f} "
+                    f"(gap: {time_gap*1000:.1f}ms)"
+                )
+            else:
+                self.get_logger().info(
+                    f"Following: {msg.linear.x:.2f}, {msg.linear.y:.2f}, {msg.angular.z:.2f} "
+                    f"(first cmd after {time_gap:.1f}s pause)"
+                )
 
 def main():
     rclpy.init()
