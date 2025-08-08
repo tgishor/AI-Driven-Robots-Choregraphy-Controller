@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'numpy', 'librosa'],
     zip_safe=True,
     maintainer='ubuntu',
     maintainer_email='ubuntu@todo.todo',
@@ -32,7 +32,8 @@ setup(
                 'robot_sync = jetrover_controller.robot_synchronizer:main',
                 'multi_arm = jetrover_controller.multi_robot_arm_controller:main',
                 'arm_sync = jetrover_controller.arm_synchronizer:main',
-                'arm_keyboard = jetrover_controller.arm_keyboard:main'
+                'arm_keyboard = jetrover_controller.arm_keyboard:main',
+                'mecanum_dance = jetrover_controller.mecanum_dance:main'
         ],
     },
 )
