@@ -27,7 +27,7 @@ class SimpleChoreographyController(Node):
         
         # Default to robot1 and robot2 if no namespaces provided
         if robot_namespaces is None:
-            robot_namespaces = ['robot1', 'robot2']
+            robot_namespaces = ['robot_1', 'robot_2']
         
         self.robot_namespaces = robot_namespaces
         
