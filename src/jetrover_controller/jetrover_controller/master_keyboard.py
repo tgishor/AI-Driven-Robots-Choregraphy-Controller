@@ -83,7 +83,7 @@ class MasterRobotTeleop(Node):
         print("  C: Start/Stop choreography mode")
         print("  t: Create timed movement")
         print("  s: Create spread & align movement")
-        print("  a: Create advanced multi-phase movement")
+        print("  A: Create advanced multi-phase movement")
         print("  P: Play choreography")
         print("  L: List choreographies")
         print("  D: Delete choreography")
@@ -780,7 +780,7 @@ class MasterRobotTeleop(Node):
                 elif key == 's':
                     self.create_spread_align_movement()
                     
-                elif key == 'a':
+                elif key == 'A':
                     self.create_advanced_multi_phase_movement()
                     
                 elif key == 'P':
