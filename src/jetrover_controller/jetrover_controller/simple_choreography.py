@@ -46,7 +46,7 @@ class SimpleChoreographyController(Node):
         # Choreography parameters (optimized for 0.5m max movement)
         self.primary_time = 2.5    # 2.5 seconds (0.5m at 0.2 m/s)
         self.secondary_time = 5.0  # 5.0 seconds total (return to center)
-        self.speed = 0.2          # 0.2 m/s
+        self.speed = 0.15         # 0.2 m/s
         
         print("🎭 Simple Multi-Robot Choreography Controller")
         print(f"🤖 Controlling Robots: {', '.join(robot_namespaces)}")
