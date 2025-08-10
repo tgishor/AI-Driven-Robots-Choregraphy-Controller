@@ -27,10 +27,10 @@ class MasterRobotTeleop(Node):
         self.robot_namespaces = robot_namespaces
         
         # Create publishers for each robot
-        self.publishers = {}
+        self.robot_publishers = {}
         for namespace in robot_namespaces:
             topic_name = f'/{namespace}/controller/cmd_vel'
-            self.publishers[namespace] = self.create_publisher(Twist, topic_name, 10)
+            self.robot_publishers[namespace] = self.create_publisher(Twist, topic_name, 10)
             print(f"📡 Publisher created for {namespace}: {topic_name}")
         
         self.speed = 0.1
@@ -93,7 +93,7 @@ class MasterRobotTeleop(Node):
         turn_time = (2 * math.pi) / self.turn_speed
         print(f"Current speed: {self.speed:.2f} m/s")
         print(f"Current turn speed: {self.turn_speed:.2f} rad/s (360° in {turn_time:.1f}s)")
-        print(f"Publishing to {len(self.publishers)} robots")
+        print(f"Publishing to {len(self.robot_publishers)} robots")
         
     def update_position(self, robot_namespace, linear_x, linear_y, angular_z, duration):
         """Update robot position based on movement"""
@@ -608,12 +608,12 @@ class MasterRobotTeleop(Node):
         
     def send_cmd_to_robot(self, robot_namespace, linear_x=0, linear_y=0, angular_z=0):
         """Send movement command to specific robot"""
-        if robot_namespace in self.publishers:
+        if robot_namespace in self.robot_publishers:
             twist = Twist()
             twist.linear.x = float(linear_x)
             twist.linear.y = float(linear_y)
             twist.angular.z = float(angular_z)
-            self.publishers[robot_namespace].publish(twist)
+            self.robot_publishers[robot_namespace].publish(twist)
         
     def send_cmd_to_all(self, linear_x=0, linear_y=0, angular_z=0):
         """Send movement command to all robots"""
@@ -622,7 +622,7 @@ class MasterRobotTeleop(Node):
         twist.linear.y = float(linear_y)
         twist.angular.z = float(angular_z)
         
-        for publisher in self.publishers.values():
+        for publisher in self.robot_publishers.values():
             publisher.publish(twist)
         
     def full_turn_right(self):
