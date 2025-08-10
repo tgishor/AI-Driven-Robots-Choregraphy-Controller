@@ -43,10 +43,10 @@ class SimpleChoreographyController(Node):
         for namespace in robot_namespaces:
             self.robot_positions[namespace] = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
         
-        # Choreography parameters (optimized for 0.5m max movement)
-        self.primary_time = 2.5    # 2.5 seconds (0.5m at 0.2 m/s)
-        self.secondary_time = 5.0  # 5.0 seconds total (return to center)
-        self.speed = 0.15         # 0.2 m/s
+        # Choreography parameters (crossover pattern with 0.5m max displacement)
+        self.primary_time = 2.5    # 2.5 seconds (move 0.375m outward)
+        self.secondary_time = 8.0  # 8.0 seconds total (cross over to other side)
+        self.speed = 0.15         # 0.15 m/s
         
         print("🎭 Simple Multi-Robot Choreography Controller")
         print(f"🤖 Controlling Robots: {', '.join(robot_namespaces)}")
@@ -64,10 +64,10 @@ class SimpleChoreographyController(Node):
         print(f"   Phase 2 distance: {secondary_distance:.2f}m")
         print(f"   Net displacement: {abs(net_distance):.2f}m {'left' if net_distance > 0 else 'right'}")
         print("")
-        print("🎯 Movement Pattern:")
-        print("   Robot 1: RIGHT → LEFT")
-        print("   Robot 2: LEFT → RIGHT")
-        print("   Final: Auto-alignment to vertical line")
+        print("🎯 Movement Pattern (Crossover):")
+        print("   Robot 1: RIGHT (0.375m) → LEFT (0.825m) = 0.45m left of center")
+        print("   Robot 2: LEFT (0.375m) → RIGHT (0.825m) = 0.45m right of center")
+        print("   Final: Auto-alignment back to vertical line")
         print("="*60)
         print("Controls:")
         print("  E/e: Execute choreography")
