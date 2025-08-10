@@ -43,9 +43,9 @@ class SimpleChoreographyController(Node):
         for namespace in robot_namespaces:
             self.robot_positions[namespace] = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
         
-        # Choreography parameters (hardcoded for simplicity)
-        self.primary_time = 3.0    # 3 seconds
-        self.secondary_time = 9.0  # 9 seconds total (so 6 more seconds)
+        # Choreography parameters (optimized for 0.5m max movement)
+        self.primary_time = 2.5    # 2.5 seconds (0.5m at 0.2 m/s)
+        self.secondary_time = 5.0  # 5.0 seconds total (return to center)
         self.speed = 0.2          # 0.2 m/s
         
         print("🎭 Simple Multi-Robot Choreography Controller")
@@ -55,6 +55,14 @@ class SimpleChoreographyController(Node):
         print(f"   Primary time: {self.primary_time}s")
         print(f"   Secondary time: {self.secondary_time}s (total)")
         print(f"   Speed: {self.speed} m/s")
+        print("")
+        print("📐 Distance Calculations:")
+        primary_distance = self.speed * self.primary_time
+        secondary_distance = self.speed * (self.secondary_time - self.primary_time)
+        net_distance = secondary_distance - primary_distance
+        print(f"   Phase 1 distance: {primary_distance:.2f}m")
+        print(f"   Phase 2 distance: {secondary_distance:.2f}m")
+        print(f"   Net displacement: {abs(net_distance):.2f}m {'left' if net_distance > 0 else 'right'}")
         print("")
         print("🎯 Movement Pattern:")
         print("   Robot 1: RIGHT → LEFT")
@@ -117,19 +125,40 @@ class SimpleChoreographyController(Node):
         # Reset positions
         self.reset_all_positions()
         
+        # Pre-execution synchronization - send stop command to ensure all robots are ready
+        print("🔄 Synchronizing robots...")
+        for _ in range(5):  # Send stop commands for 0.5 seconds
+            self.send_cmd_to_all(0, 0, 0)
+            time.sleep(0.1)
+        
+        # Countdown for perfect timing
+        for i in range(3, 0, -1):
+            print(f"⏰ Starting in {i}...")
+            time.sleep(1.0)
+        print("🚀 GO!")
+        
         # Phase 1: Primary movement (3 seconds)
+        phase1_distance = self.speed * self.primary_time
         print(f"\n🚀 Phase 1: Primary movement ({self.primary_time}s)")
-        print("   Robot 1: Moving RIGHT")
-        print("   Robot 2: Moving LEFT")
+        print(f"   Robot 1: Moving RIGHT {phase1_distance:.2f}m")
+        print(f"   Robot 2: Moving LEFT {phase1_distance:.2f}m")
         
         start_time = time.time()
         while time.time() - start_time < self.primary_time:
-            # Robot 1 moves RIGHT (negative Y)
-            self.send_cmd_to_robot(self.robot_namespaces[0], linear_y=-self.speed)
+            # Create all Twist messages first for perfect synchronization
+            twist_commands = []
+            for i, namespace in enumerate(self.robot_namespaces):
+                twist = Twist()
+                if i == 0:  # Robot 1 moves RIGHT (negative Y)
+                    twist.linear.y = -self.speed
+                else:  # Robot 2+ moves LEFT (positive Y)
+                    twist.linear.y = self.speed
+                twist_commands.append((namespace, twist))
             
-            # Robot 2 moves LEFT (positive Y) 
-            if len(self.robot_namespaces) > 1:
-                self.send_cmd_to_robot(self.robot_namespaces[1], linear_y=self.speed)
+            # Publish all commands simultaneously
+            for namespace, twist in twist_commands:
+                if namespace in self.robot_publishers:
+                    self.robot_publishers[namespace].publish(twist)
             
             time.sleep(0.1)
         
@@ -142,18 +171,27 @@ class SimpleChoreographyController(Node):
         
         # Phase 2: Secondary movement (remaining time)
         remaining_time = self.secondary_time - self.primary_time
+        phase2_distance = self.speed * remaining_time
         print(f"\n🚀 Phase 2: Secondary movement ({remaining_time}s)")
-        print("   Robot 1: Moving LEFT")
-        print("   Robot 2: Moving RIGHT")
+        print(f"   Robot 1: Moving LEFT {phase2_distance:.2f}m")
+        print(f"   Robot 2: Moving RIGHT {phase2_distance:.2f}m")
         
         start_time = time.time()
         while time.time() - start_time < remaining_time:
-            # Robot 1 moves LEFT (positive Y)
-            self.send_cmd_to_robot(self.robot_namespaces[0], linear_y=self.speed)
+            # Create all Twist messages first for perfect synchronization
+            twist_commands = []
+            for i, namespace in enumerate(self.robot_namespaces):
+                twist = Twist()
+                if i == 0:  # Robot 1 moves LEFT (positive Y)
+                    twist.linear.y = self.speed
+                else:  # Robot 2+ moves RIGHT (negative Y)
+                    twist.linear.y = -self.speed
+                twist_commands.append((namespace, twist))
             
-            # Robot 2 moves RIGHT (negative Y)
-            if len(self.robot_namespaces) > 1:
-                self.send_cmd_to_robot(self.robot_namespaces[1], linear_y=-self.speed)
+            # Publish all commands simultaneously
+            for namespace, twist in twist_commands:
+                if namespace in self.robot_publishers:
+                    self.robot_publishers[namespace].publish(twist)
             
             time.sleep(0.1)
         
@@ -203,6 +241,18 @@ class SimpleChoreographyController(Node):
         self.send_cmd_to_all(0, 0, 0)
         
         print(f"\n🎉 Choreography execution complete!")
+        
+        # Calculate and display total distances moved
+        phase1_distance = self.speed * self.primary_time
+        phase2_distance = self.speed * (self.secondary_time - self.primary_time)
+        total_distance_per_robot = phase1_distance + phase2_distance
+        
+        print(f"\n📊 Movement Summary:")
+        print(f"   Each robot total distance: {total_distance_per_robot:.2f}m")
+        print(f"   Robot 1: RIGHT {phase1_distance:.2f}m → LEFT {phase2_distance:.2f}m")
+        print(f"   Robot 2: LEFT {phase1_distance:.2f}m → RIGHT {phase2_distance:.2f}m")
+        print(f"   Net displacement: {abs(phase2_distance - phase1_distance):.2f}m")
+        
         print("📍 Final aligned positions:")
         for namespace in self.robot_namespaces:
             pos = self.get_position(namespace)
