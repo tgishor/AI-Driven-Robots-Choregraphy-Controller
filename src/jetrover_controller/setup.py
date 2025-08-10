@@ -34,7 +34,8 @@ setup(
                 'arm_sync = jetrover_controller.arm_synchronizer:main',
                 'arm_keyboard = jetrover_controller.arm_keyboard:main',
                 'mecanum_dance = jetrover_controller.mecanum_dance:main',
-                'master_keyboard = jetrover_controller.master_keyboard:main'
+                'master_keyboard = jetrover_controller.master_keyboard:main',
+                'simple_choreography = jetrover_controller.simple_choreography:main'
         ],
     },
 )
