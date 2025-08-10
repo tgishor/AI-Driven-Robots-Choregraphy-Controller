@@ -33,7 +33,8 @@ setup(
                 'multi_arm = jetrover_controller.multi_robot_arm_controller:main',
                 'arm_sync = jetrover_controller.arm_synchronizer:main',
                 'arm_keyboard = jetrover_controller.arm_keyboard:main',
-                'mecanum_dance = jetrover_controller.mecanum_dance:main'
+                'mecanum_dance = jetrover_controller.mecanum_dance:main',
+                'master_keyboard = jetrover_controller.master_keyboard:main'
         ],
     },
 )
