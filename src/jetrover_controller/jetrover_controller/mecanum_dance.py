@@ -26,6 +26,12 @@ class MecanumDanceConductor(Node):
         audio_player: str = 'mpg123',
         duo_mode: str = 'mirror',  # mirror | canon | complementary
         seed: int = 7,
+        compact: bool = True,
+        arena_width_m: float = 2.0,
+        arena_depth_m: float = 1.5,
+        max_disp_per_beat_m: float = 0.12,
+        max_yaw_per_beat_rad: float = 0.35,
+        beat_pulse_fraction: float = 0.33,
     ) -> None:
         super().__init__('mecanum_dance_conductor')
 
@@ -38,6 +44,12 @@ class MecanumDanceConductor(Node):
         self.audio_player = audio_player
         self.robot_namespaces = robot_namespaces
         self.duo_mode = duo_mode
+        self.compact = compact
+        self.arena_width_m = max(0.5, float(arena_width_m))
+        self.arena_depth_m = max(0.5, float(arena_depth_m))
+        self.max_disp_per_beat_m = max(0.01, float(max_disp_per_beat_m))
+        self.max_yaw_per_beat_rad = max(0.05, float(max_yaw_per_beat_rad))
+        self.beat_pulse_fraction = float(min(0.8, max(0.15, beat_pulse_fraction)))
 
         # QoS with low latency and reliable delivery (consistent with existing nodes)
         self.realtime_qos = QoSProfile(
@@ -51,6 +63,8 @@ class MecanumDanceConductor(Node):
         self.servo_publishers: Dict[str, rclpy.publisher.Publisher] = {}
         self.current_servo_positions: Dict[str, Dict[int, float]] = {}
         self.pose_received: Dict[str, bool] = {}
+        self.sign_state: Dict[str, int] = {}
+        self.virtual_pose: Dict[str, Dict[str, float]] = {}
 
         for ns in self.robot_namespaces:
             cmd_topic = f'/{ns}/controller/cmd_vel'
@@ -61,6 +75,8 @@ class MecanumDanceConductor(Node):
             self.servo_publishers[ns] = self.create_publisher(ServosPosition, servo_topic, self.realtime_qos)
             self.current_servo_positions[ns] = {1: 500, 2: 500, 3: 500, 4: 500, 5: 500, 10: 500}
             self.pose_received[ns] = False
+            self.sign_state[ns] = 1
+            self.virtual_pose[ns] = {"x": 0.0, "y": 0.0, "theta": 0.0}
 
             # Subscribe to servo states for each robot
             self.create_subscription(
@@ -71,9 +87,10 @@ class MecanumDanceConductor(Node):
             )
 
         # Movement and gesture configuration
-        self.max_linear_speed_mps = 0.22  # conservative for indoor choreo
-        self.max_lateral_speed_mps = 0.22
-        self.max_angular_speed_rps = 1.2
+        # Base speed caps (further constrained per-beat by max_disp_per_beat)
+        self.max_linear_speed_mps = 0.16 if compact else 0.22
+        self.max_lateral_speed_mps = 0.16 if compact else 0.22
+        self.max_angular_speed_rps = 0.9 if compact else 1.2
         self.max_servo_delta = 180.0  # pulses around home per beat for expressive gestures
         self.servo_ids = [1, 2, 3, 4, 5, 10]
 
@@ -140,45 +157,72 @@ class MecanumDanceConductor(Node):
         # Start audio playback
         audio_thread = threading.Thread(target=self._play_audio, daemon=True)
         audio_thread.start()
-        start_time = time.time() + 0.6  # small lead to align first command
+        # Small lead to align first command, then use perf_counter for precision
+        start_time = time.perf_counter() + 0.35
 
         # Phrase planning: group beats into phrases with a single choreo motif
         phrase_len_beats = 4
-        patterns = [
-            'sway',
-            'strafe_mirror',
-            'diagonal_box',
-            'spin_and_wave',
-            'circle_pair',
-            'criss_cross',
-            'pose_hold',
-        ]
 
         for phrase_start in range(0, len(self.sections), phrase_len_beats):
             phrase_sections = self.sections[phrase_start:phrase_start + phrase_len_beats]
             if not phrase_sections:
                 break
 
-            pattern = random.choice(patterns)
+            # Adaptive pattern per beat based on loudness and phrase context
+            pattern = self._select_pattern(phrase_sections, local_idx)
 
             # Execute the phrase beat by beat
             for local_idx, (s, e, loud_ratio) in enumerate(phrase_sections):
                 scheduled_at = start_time + s
-                wait_s = scheduled_at - time.time()
+                now = time.perf_counter()
+                wait_s = scheduled_at - now
                 if wait_s > 0:
                     time.sleep(wait_s)
 
                 duration = max(0.15, e - s)
                 energy = min(1.0, (loud_ratio - 0.2) / 1.8)  # 0..1
 
-                # Publish for each robot with per-robot role/variation
+                # Compute pulse duration and publish body+arms per robot
+                pulse_dur = self.beat_pulse_fraction * duration
+
+                twists: Dict[str, Twist] = {}
+                targets_per_robot: Dict[str, Dict[int, float]] = {}
+
                 for idx, ns in enumerate(self.robot_namespaces):
                     role = self._role_for_robot(idx, local_idx)
-                    self._execute_pattern_for_robot(ns, pattern, role, energy, duration)
+                    base_twist = self._twist_for_pattern(pattern, role, energy)
+                    twist = self._apply_constraints(ns, base_twist, pulse_dur)
+                    twists[ns] = twist
+                    targets_per_robot[ns] = self._arm_targets_for_pattern(ns, pattern, role, energy)
+
+                # Publish body moves
+                for ns, twist in twists.items():
+                    self.cmd_vel_publishers[ns].publish(twist)
+
+                # Publish arm gestures
+                for ns, targets in targets_per_robot.items():
+                    self._publish_servos(ns, duration * 0.85, targets)
+
+                # Hold pulse then stop body
+                time.sleep(max(0.05, pulse_dur))
+                self._all_stop()
+
+                # Update virtual pose with executed pulse
+                for ns, twist in twists.items():
+                    self._integrate_virtual_pose(ns, twist, pulse_dur)
 
         # End: stop motions and return arms to home
         self._all_stop()
         self._all_return_home(2.0)
+
+    def _select_pattern(self, phrase_sections: List[Tuple[float, float, float]], local_idx: int) -> str:
+        # Loudness of current beat
+        _, _, loud_ratio = phrase_sections[local_idx]
+        if loud_ratio > 1.3:
+            return 'spin_and_wave' if local_idx % 2 == 0 else 'sway'
+        if loud_ratio < 0.7:
+            return 'pose_hold' if local_idx % 2 == 0 else 'sway'
+        return 'strafe_mirror' if local_idx % 2 == 0 else 'sway'
 
     def _role_for_robot(self, robot_index: int, beat_index_in_phrase: int) -> str:
         if self.duo_mode == 'mirror':
@@ -221,31 +265,14 @@ class MecanumDanceConductor(Node):
             t.linear.y = direction * lat_scale
             return t
 
-        if pattern == 'diagonal_box':
-            # Box step across 4 beats, mapped by role to diagonals
-            # Role determines primary axis; alternate slight rotation
-            t.linear.x = lin_scale * (1.0 if role == 'A' else -1.0)
-            t.linear.y = lat_scale * (1.0 if role == 'A' else 1.0)
-            t.angular.z = 0.2 * (-ang_scale if role == 'A' else ang_scale)
-            return t
+        # Remove wide-ranging diagonal_box/circle/criss patterns for constrained spaces
 
         if pattern == 'spin_and_wave':
             t.angular.z = (-ang_scale if role == 'A' else ang_scale)
             t.linear.x = 0.05 * lin_scale
             return t
 
-        if pattern == 'circle_pair':
-            # Small circles in opposite directions
-            t.linear.x = 0.6 * lin_scale
-            t.linear.y = (lat_scale if role == 'A' else -lat_scale)
-            t.angular.z = (0.3 * ang_scale if role == 'A' else -0.3 * ang_scale)
-            return t
-
-        if pattern == 'criss_cross':
-            # Cross paths: one forward-left, other forward-right
-            t.linear.x = 0.7 * lin_scale
-            t.linear.y = (lat_scale if role == 'A' else -lat_scale)
-            return t
+        # Fallback minimal forward pulse on unknown
 
         if pattern == 'pose_hold':
             # Minimal movement
@@ -255,6 +282,57 @@ class MecanumDanceConductor(Node):
             return t
 
         return t
+
+    def _apply_constraints(self, ns: str, twist: Twist, pulse_dur: float) -> Twist:
+        # Alternate direction each beat to keep net-zero trend
+        sgn = self.sign_state[ns]
+        self.sign_state[ns] *= -1
+
+        twist.linear.x *= sgn
+        twist.linear.y *= sgn
+        twist.angular.z *= sgn
+
+        # Scale to respect per-beat displacement and yaw caps
+        abs_lin = abs(twist.linear.x)
+        abs_lat = abs(twist.linear.y)
+        abs_ang = abs(twist.angular.z)
+
+        def scale_component(value: float, max_per_beat: float) -> float:
+            if value == 0.0:
+                return 0.0
+            max_speed = max_per_beat / max(0.05, pulse_dur)
+            scale = min(1.0, max_speed / abs(value))
+            return value * scale
+
+        twist.linear.x = scale_component(twist.linear.x, self.max_disp_per_beat_m)
+        twist.linear.y = scale_component(twist.linear.y, self.max_disp_per_beat_m)
+        twist.angular.z = scale_component(twist.angular.z, self.max_yaw_per_beat_rad)
+
+        # Arena boundary bias: if near edge, bias inward by reducing outward component
+        pose = self.virtual_pose[ns]
+        half_w = self.arena_width_m / 2.0
+        half_d = self.arena_depth_m / 2.0
+
+        # Predict next position
+        next_x = pose["x"] + twist.linear.x * pulse_dur
+        next_y = pose["y"] + twist.linear.y * pulse_dur
+
+        if next_x > 0.8 * half_d:
+            twist.linear.x = min(0.0, twist.linear.x)
+        if next_x < -0.8 * half_d:
+            twist.linear.x = max(0.0, twist.linear.x)
+        if next_y > 0.8 * half_w:
+            twist.linear.y = min(0.0, twist.linear.y)
+        if next_y < -0.8 * half_w:
+            twist.linear.y = max(0.0, twist.linear.y)
+
+        return twist
+
+    def _integrate_virtual_pose(self, ns: str, twist: Twist, dt: float) -> None:
+        pose = self.virtual_pose[ns]
+        pose["x"] += float(twist.linear.x) * dt
+        pose["y"] += float(twist.linear.y) * dt
+        pose["theta"] += float(twist.angular.z) * dt
 
     def _arm_targets_for_pattern(self, ns: str, pattern: str, role: str, energy: float) -> Dict[int, float]:
         # Use current position as base; fall back to home 500
@@ -381,6 +459,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--player', default='mpg123', choices=['mpg123', 'mpg321', 'mplayer', 'aplay'], help='Audio player')
     parser.add_argument('--duo-mode', default='mirror', choices=['mirror', 'canon', 'complementary'], help='Relationship between robots')
     parser.add_argument('--seed', type=int, default=7, help='Random seed for repeatability')
+    parser.add_argument('--compact', action='store_true', default=True, help='Constrain moves to compact micro-pulses (default on)')
+    parser.add_argument('--arena-width', type=float, default=2.0, help='Arena width (Y), meters')
+    parser.add_argument('--arena-depth', type=float, default=1.5, help='Arena depth (X), meters')
+    parser.add_argument('--max-disp-per-beat', type=float, default=0.12, help='Max linear displacement per beat (m)')
+    parser.add_argument('--max-yaw-per-beat', type=float, default=0.35, help='Max yaw per beat (rad)')
+    parser.add_argument('--beat-pulse', type=float, default=0.33, help='Fraction of beat used to move, rest to stop')
     return parser.parse_args()
 
 
@@ -394,6 +478,12 @@ def main() -> None:
             audio_player=args.player,
             duo_mode=args.duo_mode,
             seed=args.seed,
+            compact=args.compact,
+            arena_width_m=args.arena_width,
+            arena_depth_m=args.arena_depth,
+            max_disp_per_beat_m=args.max_disp_per_beat,
+            max_yaw_per_beat_rad=args.max_yaw_per_beat,
+            beat_pulse_fraction=args.beat_pulse,
         )
         rclpy.spin(node)
     except KeyboardInterrupt:
