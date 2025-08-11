@@ -19,7 +19,7 @@ import numpy as np
 from scipy import signal
 from sklearn.cluster import KMeans
 
-default_audio = '/home/ubuntu/axy_proj/src/jetrover_controller/jetrover_controller/music.mp3'
+default_audio = '/home/ubuntu/axy_proj/src/jetrover_controller/jetrover_controller/On-The-Floor.mp3'
 
 class AdvancedDanceNode(Node):
     def __init__(self, audio_path, audio_player='mpg123', buffer_time=2.0):
