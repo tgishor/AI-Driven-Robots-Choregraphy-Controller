@@ -114,8 +114,12 @@ class AdvancedDanceNode(Node):
             # Rhythm analysis
             tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
             beat_times = librosa.frames_to_time(beats, sr=sr)
+            
+            # Ensure tempo is a scalar value
+            tempo_value = float(tempo) if hasattr(tempo, '__len__') and len(tempo) > 0 else float(tempo)
+            
             self.musical_features.update({
-                'tempo': tempo,
+                'tempo': tempo_value,
                 'beats': beats,
                 'beat_times': beat_times
             })
@@ -152,7 +156,7 @@ class AdvancedDanceNode(Node):
                 'zero_crossing_rate': zero_crossing_rate
             })
             
-            self.get_logger().info(f"Musical analysis complete: {self.song_duration:.1f}s song, {tempo:.1f} BPM, {len(beat_times)} beats")
+            self.get_logger().info(f"Musical analysis complete: {self.song_duration:.1f}s song, {tempo_value:.1f} BPM, {len(beat_times)} beats")
             
         except Exception as e:
             self.get_logger().error(f"Musical analysis failed: {e}")
@@ -651,6 +655,8 @@ def main():
     args, _ = parser.parse_known_args()
 
     rclpy.init()
+    node = None
+    
     try:
         # Create the advanced dance node
         node = AdvancedDanceNode(args.audio, args.player, args.buffer)
@@ -677,13 +683,17 @@ def main():
         rclpy.spin(node)
         
     except KeyboardInterrupt:
-        node.get_logger().info("Keyboard interrupt - emergency stopping...")
-        if hasattr(node, 'emergency_stop'):
-            node.emergency_stop()
+        if node:
+            node.get_logger().info("Keyboard interrupt - emergency stopping...")
+            if hasattr(node, 'emergency_stop'):
+                node.emergency_stop()
     except Exception as e:
-        node.get_logger().error(f"Unexpected error: {e}")
-        if hasattr(node, 'emergency_stop'):
-            node.emergency_stop()
+        if node:
+            node.get_logger().error(f"Unexpected error: {e}")
+            if hasattr(node, 'emergency_stop'):
+                node.emergency_stop()
+        else:
+            print(f"Error during initialization: {e}")
     finally:
         rclpy.shutdown()
 
