@@ -1,7 +1,7 @@
 from pydub import AudioSegment
 
 # Load your audio file
-song = AudioSegment.from_file("E:\OpenDayRobotics\AI-Driven-Robots-Choregraphy-Controller\src\jetrover_controller\jetrover_controller\sapphire.mp3", format="mp3")
+song = AudioSegment.from_file("E:\OpenDayRobotics\AI-Driven-Robots-Choregraphy-Controller\src\jetrover_controller\jetrover_controller\On-The-Floor.mp3", format="mp3")
 
 # Set trim points (in milliseconds)
 start_time = 30 * 1000   # 30 seconds
