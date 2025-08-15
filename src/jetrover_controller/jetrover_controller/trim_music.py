@@ -14,3 +14,7 @@ trimmed_song = song[start_time:end_time]
 trimmed_song.export("trimmed_song.mp3", format="mp3")
 
 print("Song trimmed successfully!")
+
+
+
+## FUCK THIS IS NEW MF
