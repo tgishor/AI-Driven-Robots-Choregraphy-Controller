@@ -22,7 +22,7 @@ from sklearn.cluster import KMeans
 default_audio = '/home/ubuntu/axy_proj/src/jetrover_controller/jetrover_controller/On-The-Floor.mp3'
 
 class AdvancedDanceNode(Node):
-    def __init__(self, audio_path, audio_player='mpg123', buffer_time=2.0, energy_scale=0.85):
+    def __init__(self, audio_path, audio_player='mpg123', buffer_time=2.0, energy_scale=0.30):
         super().__init__('advanced_dance_node')
         self.audio_path = audio_path
         self.audio_player = audio_player
