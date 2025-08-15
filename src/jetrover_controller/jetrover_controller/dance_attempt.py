@@ -18,6 +18,10 @@ import librosa
 import numpy as np
 from scipy import signal
 from sklearn.cluster import KMeans
+import sys
+import termios
+import tty
+import select
 
 default_audio = '/home/ubuntu/axy_proj/src/jetrover_controller/jetrover_controller/On-The-Floor.mp3'
 
@@ -64,6 +68,17 @@ class AdvancedDanceNode(Node):
         self.accumulated_displacement = {'x': 0.0, 'y': 0.0}
         self.last_forced_return = 0
         
+        # STRICT 3-SECOND FORWARD LIMIT ENFORCEMENT
+        self.forward_start_time = None
+        self.total_forward_time = 0.0
+        self.is_currently_moving_forward = False
+        self.last_movement_check_time = time.time()
+        self.FORWARD_TIME_LIMIT = 3.0  # MAXIMUM 3 seconds forward before FORCED backward
+        
+        # Keyboard monitoring for 'S' key stop
+        self.keyboard_monitoring = False
+        self.original_settings = None
+        
         # Enhanced movement vocabulary including Mecanum-specific movements
         self.movement_types = {
             # Arm-based servo movements
@@ -76,26 +91,27 @@ class AdvancedDanceNode(Node):
             'subtle_sway': {'energy': 'low', 'brightness': 'medium', 'pattern': 'gentle', 'type': 'servo'},
             'powerful_strike': {'energy': 'very_high', 'brightness': 'high', 'pattern': 'accent', 'type': 'servo'},
             
-            # Mecanum base movements
-            'sideways_slide': {'energy': 'medium', 'brightness': 'medium', 'pattern': 'smooth', 'type': 'base'},
-            'diagonal_drift': {'energy': 'medium', 'brightness': 'high', 'pattern': 'flowing', 'type': 'base'},
-            'spin_in_place': {'energy': 'high', 'brightness': 'high', 'pattern': 'rotational', 'type': 'base'},
-            'circular_flow': {'energy': 'medium', 'brightness': 'medium', 'pattern': 'circular', 'type': 'base'},
-            'zigzag_dance': {'energy': 'high', 'brightness': 'high', 'pattern': 'sharp', 'type': 'base'},
-            'smooth_glide': {'energy': 'low', 'brightness': 'low', 'pattern': 'sustained', 'type': 'base'},
-            'rhythmic_steps': {'energy': 'medium', 'brightness': 'low', 'pattern': 'rhythmic', 'type': 'base'},
-            'explosive_burst': {'energy': 'very_high', 'brightness': 'very_high', 'pattern': 'sudden', 'type': 'base'}
+            # PURE SPINNING movements - 50cm constraint space - NO LINEAR MOVEMENT
+            'spin_left': {'energy': 'medium', 'brightness': 'medium', 'pattern': 'rotational_left', 'type': 'base'},
+            'spin_right': {'energy': 'medium', 'brightness': 'medium', 'pattern': 'rotational_right', 'type': 'base'},
+            'half_circle_left': {'energy': 'high', 'brightness': 'high', 'pattern': 'half_rotation_left', 'type': 'base'},
+            'half_circle_right': {'energy': 'high', 'brightness': 'high', 'pattern': 'half_rotation_right', 'type': 'base'},
+            'quarter_circle_left': {'energy': 'low', 'brightness': 'low', 'pattern': 'quarter_rotation_left', 'type': 'base'},
+            'quarter_circle_right': {'energy': 'low', 'brightness': 'low', 'pattern': 'quarter_rotation_right', 'type': 'base'},
+            'full_circle_left': {'energy': 'very_high', 'brightness': 'very_high', 'pattern': 'full_rotation_left', 'type': 'base'},
+            'full_circle_right': {'energy': 'very_high', 'brightness': 'very_high', 'pattern': 'full_rotation_right', 'type': 'base'},
+            'spin_burst': {'energy': 'explosive', 'brightness': 'explosive', 'pattern': 'random_spin', 'type': 'base'}
         }
         
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
-        self.get_logger().info(f"🕺💃 CONTROLLED SPACE DANCING: Arms + Wheels synchronized, FORCED to stay in place!")
-        self.get_logger().info(f"🐌 SLOW Speed Limits: Max 0.5 m/s linear, 3.0 rad/s angular - NO HIGH SPEED!")
-        self.get_logger().info(f"⚡ Super Quick Bursts: Max 0.1s duration")
-        self.get_logger().info(f"🔄 FORCED Return Every 3 Beats: Robot MUST return to center!")
-        self.get_logger().info(f"🛑 Enhanced Ctrl+C Stop: 100+ stop commands to ensure wheels stop!")
-        self.get_logger().info(f"📍 Displacement Tracking: Prevents continuous forward movement!")
+        self.get_logger().info(f"🌀 PURE SPINNING DANCE: 50cm constraint space - ZERO LINEAR MOVEMENT!")
+        self.get_logger().info(f"🔄 SPIN-ONLY MODES: Left spins, Right spins, Half circles, Quarter circles, Full circles!")
+        self.get_logger().info(f"🎯 ROTATION SPEEDS: Max 3.0 rad/s - Dynamic spin variations based on music!")
+        self.get_logger().info(f"📍 STATIONARY DANCING: Robot stays in exact same position - only rotates!")
+        self.get_logger().info(f"🛑 Multiple Stop Methods: Ctrl+C OR press 'S' key - 1 stop command per second!")
+        self.get_logger().info(f"🌪️ NO DISPLACEMENT: Arms + Pure rotational wheel movements only!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
@@ -284,20 +300,7 @@ class AdvancedDanceNode(Node):
                     'features': segment_features
                 })
                 
-                # ADD AUTOMATIC RETURN MOVEMENT for linear movements to stay in place
-                if self.has_linear_movement(movement_commands):
-                    return_commands = self.create_return_movement(movement_commands, segment_features)
-                    if return_commands:
-                        return_start = end_time
-                        return_end = end_time + 0.05  # Very quick 0.05s return movement
-                        segments.append({
-                            'start_time': return_start,
-                            'end_time': return_end,
-                            'duration': 0.05,
-                            'movement_type': f"return_{movement_type}",
-                            'movement_commands': return_commands,
-                            'features': segment_features
-                        })
+                # NO RETURN MOVEMENTS NEEDED - PURE SPINNING HAS NO DISPLACEMENT!
         
         # Smooth transitions and optimize timing
         self.choreography_timeline = self.optimize_choreography(segments)
@@ -340,80 +343,77 @@ class AdvancedDanceNode(Node):
         }
 
     def classify_movement_type(self, features):
-        """Classify movement type - ARMS + WHEELS for synchronized dancing"""
+        """Classify movement type - PURE SPINNING DANCE for 50cm constraint space"""
         energy = features['energy']
         brightness = features['brightness']
         onset = features['onset_strength']
         duration = features['duration']
         
-        # NEW: ARMS + WHEELS SYNCHRONIZED DANCING
-        # Map energy and musical features to both servo and base movements
+        # PURE SPINNING DANCE - NO LINEAR MOVEMENT EVER!
+        # Map energy and musical features to ONLY rotational movements + arm movements
         
-        # Very high energy - combine powerful arm movements with wheel spins
+        # EXPLOSIVE ENERGY - Random rapid spins
         if energy > 1.8 and brightness > 1.5:
-            # Alternate between powerful arms and full spins based on onset strength
             if onset > 0.7:
-                return 'explosive_burst'  # Base: quick directional burst + arms
+                return 'spin_burst'  # Base: random explosive spins + arms
             else:
                 return 'powerful_strike'  # Servo: maximum intensity arm movement
                 
+        # VERY HIGH ENERGY - Full circles
         elif energy > 1.5 and brightness > 1.5:
-            # Combine dramatic arms with rotational movements
             if onset > 0.6:
-                return 'spin_in_place'  # Base: spinning dance + arms
+                return 'full_circle_left' if brightness > energy else 'full_circle_right'  # Base: full spins + arms
             else:
                 return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # High energy movements - mix of arms and wheels
+        # HIGH ENERGY - Half circles
         elif energy > 1.2 and brightness > 1.2:
-            # Alternate between energetic arms and lateral dancing
             if duration > 0.8 and onset > 0.5:
-                return 'zigzag_dance'  # Base: quick directional changes + arms
+                return 'half_circle_left' if brightness > 1.3 else 'half_circle_right'  # Base: half spins + arms
             else:
                 return 'energetic_wave'  # Servo: sharp arm movements
                 
         elif energy > 1.2:
-            # Quick movements - arms or subtle wheel movements
+            # Dynamic spins based on onset
             if onset > 0.6:
-                return 'rhythmic_steps'  # Base: rhythmic forward/backward + arms
+                return 'spin_left' if brightness > energy else 'spin_right'  # Base: dynamic spins + arms
             else:
                 return 'bright_sparkle'  # Servo: quick bright arm movements
         
-        # Medium-high energy - balanced arms and wheel movements
+        # MEDIUM ENERGY - Controlled spins
         elif energy > 1.0 and brightness > 1.2:
-            # Flowing movements
             if duration > 1.0:
-                return 'diagonal_drift'  # Base: diagonal mecanum movement + arms
+                return 'spin_left' if onset > 0.5 else 'spin_right'  # Base: controlled spins + arms
             else:
                 return 'flowing_reach'  # Servo: sustained arm movements
                 
         elif energy > 1.0 and brightness < 0.8:
-            # Deep, rhythmic movements
+            # Gentle rotations
             if onset > 0.5:
-                return 'circular_flow'  # Base: gentle circular movement + arms
+                return 'quarter_circle_left' if energy > 1.1 else 'quarter_circle_right'  # Base: quarter turns + arms
             else:
                 return 'deep_pulse'  # Servo: rhythmic arm pulses
                 
         elif energy > 1.0:
-            # Medium energy with mixed movements
+            # Medium spins
             if duration > 0.6:
-                return 'sideways_slide'  # Base: lateral sliding + arms
+                return 'spin_right' if brightness > 1.0 else 'spin_left'  # Base: medium spins + arms
             else:
                 return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # Medium energy movements - gentle combinations
+        # LOWER ENERGY - Gentle rotations
         elif brightness > 1.3:
-            # Bright, sparkling movements
+            # Bright, gentle movements
             if onset > 0.4:
-                return 'smooth_glide'  # Base: gentle forward glide + arms
+                return 'quarter_circle_right' if energy > 0.9 else 'quarter_circle_left'  # Base: gentle quarter turns + arms
             else:
                 return 'bright_sparkle'  # Servo: quick bright arm movements
                 
         elif energy > 0.8 and brightness > 0.8:
-            # Balanced energy - flowing movements
-            return 'flowing_reach'  # Servo: sustained arm movements
+            # Balanced energy - gentle spins
+            return 'quarter_circle_left' if onset > 0.4 else 'flowing_reach'  # Base: very gentle turns OR Servo: flowing arms
         
-        # Lower energy movements - gentle arms with subtle wheel movements
+        # LOWEST ENERGY - Arms only or minimal rotation
         elif brightness > 1.0:
             return 'subtle_sway'  # Servo: gentle arm sway
         else:
@@ -524,236 +524,160 @@ class AdvancedDanceNode(Node):
         return positions
 
     def calculate_base_movement(self, movement_type, features, tempo_scale=1.0):
-        """Calculate Mecanum base movement commands - DYNAMIC FAST DANCING"""
+        """Calculate PURE SPINNING movements - 50cm constraint space - NO LINEAR MOVEMENT"""
         energy = features['energy']
         duration = features['duration']
         brightness = features['brightness']
         onset = features['onset_strength']
         
-        # CONSTRAINED SPACE DANCING: MUCH SLOWER controlled movements
-        # Very reduced speeds to prevent continuous forward movement
-        base_speed = min(0.5, energy * 0.2)  # Max 0.5 m/s - MUCH SLOWER!
-        angular_speed = min(3.0, energy * 1.0)  # Max 3.0 rad/s - SLOWER SPINS!
+        # PURE SPINNING DANCE: Only angular velocity, ZERO linear movement
+        angular_speed = min(3.0, energy * 1.2)  # Max 3.0 rad/s based on energy
         
         # Add speed boost for high brightness (bright musical passages)
         if brightness > 1.2:
-            base_speed *= 1.3  # 30% speed boost for bright sections
-            angular_speed *= 1.2  # 20% spin boost
+            angular_speed *= 1.3  # 30% spin boost for bright sections
             
         # Add speed boost for strong onsets (musical accents)
         if onset > 0.6:
-            base_speed *= 1.2  # 20% speed boost for strong beats
-            angular_speed *= 1.4  # 40% spin boost for accents
+            angular_speed *= 1.4  # 40% spin boost for strong beats
         
         # Apply TEMPO SCALING for music synchronization
-        base_speed *= tempo_scale
         angular_speed *= tempo_scale
         
-        # Cap the speeds at maximum after tempo scaling
-        base_speed = min(0.5, base_speed)  # MUCH SLOWER max linear speed
-        angular_speed = min(3.0, angular_speed)  # SLOWER max spins
+        # Cap the speed at maximum after tempo scaling
+        angular_speed = min(3.0, angular_speed)
         
+        # 🚨 CRITICAL: ZERO LINEAR MOVEMENT - PURE SPINNING ONLY! 🚨
+        # This GUARANTEES robot stays in 50cm constraint space!
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
-        if movement_type == 'sideways_slide':
-            # FAST lateral slides - dynamic side steps
-            direction = 1 if features['brightness'] > 1.0 else -1
-            base_command['linear_y'] = direction * base_speed * 0.9  # Fast lateral movement
+        if movement_type == 'spin_left':
+            # Simple left spin
+            base_command['angular_z'] = angular_speed * 0.8  # Positive = left spin
             
-        elif movement_type == 'diagonal_drift':
-            # FAST diagonal movement - signature Mecanum dance move
-            forward_speed = base_speed * 0.8  # Fast forward component
-            side_speed = base_speed * 0.7  # Fast side component
-            side_direction = 1 if features['onset_strength'] > 0.5 else -1
-            base_command['linear_x'] = forward_speed
-            base_command['linear_y'] = side_direction * side_speed
+        elif movement_type == 'spin_right':
+            # Simple right spin  
+            base_command['angular_z'] = -angular_speed * 0.8  # Negative = right spin
             
-        elif movement_type == 'spin_in_place':
-            # COOL FAST SPINS - Dynamic rotations with variations
-            spin_direction = 1 if features['brightness'] > features['energy'] else -1
+        elif movement_type == 'quarter_circle_left':
+            # Gentle left quarter turn (90 degrees)
+            base_command['angular_z'] = angular_speed * 0.4  # Slower for precision
             
-            # Dynamic spin variations based on musical features
-            if energy > 1.8 and onset > 0.7:
-                # MAXIMUM INTENSITY SPIN - Full speed with random direction changes
-                if random.random() > 0.7:
-                    spin_direction *= -1  # Surprise direction change!
-                base_command['angular_z'] = spin_direction * angular_speed  # FULL SPEED!
-            elif energy > 1.5:
-                # HIGH ENERGY SPIN - Fast with potential direction variation
-                if onset > 0.6 and random.random() > 0.8:
-                    spin_direction *= -1  # Occasional direction change
-                base_command['angular_z'] = spin_direction * angular_speed * 0.9
-            elif energy > 1.0:
-                # MEDIUM ENERGY SPIN - Good speed
-                base_command['angular_z'] = spin_direction * angular_speed * 0.7
-            else:
-                # CONTROLLED SPIN - Still fast but controlled
-                base_command['angular_z'] = spin_direction * angular_speed * 0.5
+        elif movement_type == 'quarter_circle_right':
+            # Gentle right quarter turn (90 degrees)
+            base_command['angular_z'] = -angular_speed * 0.4  # Slower for precision
             
-        elif movement_type == 'circular_flow':
-            # FAST circular movement - dynamic dance pivot
-            base_command['linear_x'] = base_speed * 0.7  # Fast forward
-            rotation_direction = 1 if features['onset_strength'] > 0.5 else -1
-            base_command['angular_z'] = rotation_direction * angular_speed * 0.6
+        elif movement_type == 'half_circle_left':
+            # Left half circle (180 degrees)
+            base_command['angular_z'] = angular_speed * 0.7  # Medium speed
             
-        elif movement_type == 'zigzag_dance':
-            # DYNAMIC directional changes - COOL RANDOM dance steps
-            direction = random.choice([-1, 1])
-            move_choice = random.random()
+        elif movement_type == 'half_circle_right':
+            # Right half circle (180 degrees)
+            base_command['angular_z'] = -angular_speed * 0.7  # Medium speed
             
-            if onset > 0.7:
-                # SUPER DYNAMIC moves for strong beats
-                if move_choice > 0.8:
-                    # COMBO MOVE: Side + spin
-                    base_command['linear_y'] = direction * base_speed * 0.8
-                    base_command['angular_z'] = -direction * angular_speed * 0.4
-                elif move_choice > 0.6:
-                    # COMBO MOVE: Forward + spin
-                    base_command['linear_x'] = direction * base_speed * 0.8
-                    base_command['angular_z'] = direction * angular_speed * 0.5
-                elif move_choice > 0.4:
-                    # DIAGONAL DASH
-                    base_command['linear_x'] = direction * base_speed * 0.7
-                    base_command['linear_y'] = -direction * base_speed * 0.7
-                else:
-                    # PURE SPIN
-                    base_command['angular_z'] = direction * angular_speed * 0.8
-            else:
-                # STANDARD zigzag moves
-                if move_choice > 0.66:
-                    # FAST side step
-                    base_command['linear_y'] = direction * base_speed * 0.9
-                elif move_choice > 0.33:
-                    # FAST forward/backward step
-                    base_command['linear_x'] = direction * base_speed * 0.9
-                else:
-                    # FAST spin move
-                    base_command['angular_z'] = direction * angular_speed * 0.7
-                
-        elif movement_type == 'smooth_glide':
-            # FAST forward glide - dynamic flow
-            base_command['linear_x'] = base_speed * 0.8
+        elif movement_type == 'full_circle_left':
+            # Full left circle (360 degrees)
+            base_command['angular_z'] = angular_speed  # Full speed for complete rotation
             
-        elif movement_type == 'rhythmic_steps':
-            # FAST rhythmic forward/backward steps - DYNAMIC dance move
-            direction = 1 if features['onset_strength'] > 0.6 else -1
-            base_command['linear_x'] = direction * base_speed * 0.9
+        elif movement_type == 'full_circle_right':
+            # Full right circle (360 degrees)
+            base_command['angular_z'] = -angular_speed  # Full speed for complete rotation
             
-        elif movement_type == 'explosive_burst':
-            # EXPLOSIVE directional burst - MAXIMUM COOL FACTOR!
+        elif movement_type == 'spin_burst':
+            # EXPLOSIVE random spinning - multiple direction changes
             burst_intensity = 1.0
             if onset > 0.8:
                 burst_intensity = 1.2  # Even more intense for very strong beats
             
-            # Create an extensive list of cool burst moves
-            burst_moves = [
-                # Basic directional bursts
-                {'linear_x': base_speed * burst_intensity, 'linear_y': 0.0},  # FAST forward dash
-                {'linear_x': -base_speed * burst_intensity, 'linear_y': 0.0},  # FAST backward dash
-                {'linear_x': 0.0, 'linear_y': base_speed * burst_intensity},  # FAST left dash
-                {'linear_x': 0.0, 'linear_y': -base_speed * burst_intensity},  # FAST right dash
-                
-                # Pure spins
-                {'angular_z': angular_speed * burst_intensity},  # FAST spin left
-                {'angular_z': -angular_speed * burst_intensity},  # FAST spin right
-                
-                # Diagonal dashes - signature Mecanum moves
-                {'linear_x': base_speed * 0.8, 'linear_y': base_speed * 0.8},  # Northeast dash
-                {'linear_x': -base_speed * 0.8, 'linear_y': -base_speed * 0.8},  # Southwest dash
-                {'linear_x': base_speed * 0.8, 'linear_y': -base_speed * 0.8},  # Southeast dash
-                {'linear_x': -base_speed * 0.8, 'linear_y': base_speed * 0.8},  # Northwest dash
-                
-                # COMBO MOVES - Linear + Angular (MOST COOL!)
-                {'linear_x': base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Forward + spin left
-                {'linear_x': base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Forward + spin right
-                {'linear_x': -base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Backward + spin left
-                {'linear_x': -base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Backward + spin right
-                {'linear_y': base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Left + spin
-                {'linear_y': -base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Right + spin
-                
-                # COMPLEX COMBOS for very high energy
-                {'linear_x': base_speed * 0.6, 'linear_y': base_speed * 0.6, 'angular_z': angular_speed * 0.4},  # Diagonal + spin
-                {'linear_x': -base_speed * 0.6, 'linear_y': -base_speed * 0.6, 'angular_z': -angular_speed * 0.4},  # Diagonal back + spin
+            # Random explosive spin moves - PURE ROTATION ONLY!
+            spin_moves = [
+                {'angular_z': angular_speed * burst_intensity},  # FAST left spin
+                {'angular_z': -angular_speed * burst_intensity},  # FAST right spin
+                {'angular_z': angular_speed * burst_intensity * 0.7},  # Medium left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.7},  # Medium right spin
+                {'angular_z': angular_speed * burst_intensity * 1.2},  # SUPER FAST left (if within limits)
+                {'angular_z': -angular_speed * burst_intensity * 1.2},  # SUPER FAST right (if within limits)
             ]
             
-            # Choose move based on energy level
-            if energy > 1.7 and len(burst_moves) > 8:
-                # High energy - prefer complex combo moves
-                chosen_move = random.choice(burst_moves[8:])  # Complex moves only
-            else:
-                # Normal energy - any move
-                chosen_move = random.choice(burst_moves)
-                
-            base_command.update(chosen_move)
+            # Choose random spin direction and intensity
+            chosen_spin = random.choice(spin_moves)
+            
+            # Apply speed limits
+            chosen_spin['angular_z'] = max(-3.0, min(3.0, chosen_spin['angular_z']))
+            
+            base_command.update(chosen_spin)
             
         return base_command
 
     def calculate_subtle_base_complement(self, movement_type, features, tempo_scale=1.0):
-        """Calculate subtle wheel movements to complement servo arm movements"""
+        """Calculate subtle SPINNING movements to complement servo arm movements - 50cm constraint"""
         energy = features['energy']
         onset = features['onset_strength']
         
-        # Subtle and SLOW movements that complement arm choreography
-        base_speed = min(0.2, energy * 0.1)  # MUCH SLOWER complementary movements
-        angular_speed = min(1.0, energy * 0.5)  # SLOWER complementary rotation
+        # Subtle SPINNING ONLY - NO LINEAR MOVEMENT for arm complementing
+        angular_speed = min(1.5, energy * 0.6)  # Gentler rotation for arm complement
         
         # Apply tempo scaling
-        base_speed *= tempo_scale
         angular_speed *= tempo_scale
         
         # Cap the speeds
-        base_speed = min(0.2, base_speed)
-        angular_speed = min(1.0, angular_speed)
+        angular_speed = min(1.5, angular_speed)
         
+        # 🚨 CRITICAL: ZERO LINEAR MOVEMENT - ONLY SUBTLE SPINS! 🚨
+        # This GUARANTEES robot stays in 50cm constraint space!
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
-        # Add subtle wheel movements based on arm movement type
+        # Add subtle SPINNING movements based on arm movement type
         if movement_type in ['powerful_strike', 'dramatic_sweep']:
-            # Slight rotation during dramatic arm movements
+            # Subtle rotation during dramatic arm movements
             direction = 1 if onset > 0.5 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.3
+            base_command['angular_z'] = direction * angular_speed * 0.4
             
         elif movement_type in ['energetic_wave', 'bright_sparkle']:
-            # Tiny side shifts during energetic arm movements
+            # Gentle spins during energetic arm movements
             direction = 1 if energy > 1.0 else -1
-            base_command['linear_y'] = direction * base_speed * 0.5
+            base_command['angular_z'] = direction * angular_speed * 0.3
             
         elif movement_type in ['flowing_reach', 'subtle_sway']:
-            # Very gentle forward/backward movement during flowing arms
+            # Very gentle rotation during flowing arms
             direction = 1 if onset > 0.4 else -1
-            base_command['linear_x'] = direction * base_speed * 0.4
+            base_command['angular_z'] = direction * angular_speed * 0.2
             
         elif movement_type == 'deep_pulse':
-            # Slight pulsing movement to match arm pulses
-            if onset > 0.5:
-                base_command['linear_x'] = base_speed * 0.3
-            else:
-                base_command['linear_x'] = -base_speed * 0.3
+            # Slight rotation to match arm pulses
+            direction = 1 if onset > 0.5 else -1
+            base_command['angular_z'] = direction * angular_speed * 0.25
                 
         elif movement_type == 'gentle_wave':
-            # Minimal swaying to complement gentle arm waves
+            # Minimal rotation to complement gentle arm waves
             direction = 1 if features['brightness'] > 1.0 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.2
+            base_command['angular_z'] = direction * angular_speed * 0.15
             
         return base_command
 
     def calculate_complementary_servo_positions(self, movement_type, features, base_amplitude):
-        """Calculate subtle servo movements to complement base movements"""
+        """Calculate subtle servo movements to complement SPINNING base movements"""
         positions = {}
         
-        # Subtle servo movements that complement base motion
+        # Subtle servo movements that complement spinning motions
         complement_amplitude = base_amplitude * 0.3  # Much gentler than main servo movements
         
         for sid in self.servo_ids:
-            if movement_type in ['sideways_slide', 'diagonal_drift']:
-                # Gentle wave during lateral movements
-                positions[sid] = self.home_positions[sid] + ((-1) ** sid) * complement_amplitude * 0.2
-            elif movement_type == 'spin_in_place':
-                # Outward reach during spins
+            if movement_type in ['spin_left', 'spin_right']:
+                # Gentle wave during spins
+                positions[sid] = self.home_positions[sid] + ((-1) ** sid) * complement_amplitude * 0.3
+            elif movement_type in ['full_circle_left', 'full_circle_right']:
+                # Outward reach during full circle spins
+                positions[sid] = self.home_positions[sid] + complement_amplitude * 0.5
+            elif movement_type in ['half_circle_left', 'half_circle_right']:
+                # Medium reach during half circles
                 positions[sid] = self.home_positions[sid] + complement_amplitude * 0.4
-            elif movement_type in ['circular_flow', 'smooth_glide']:
-                # Gentle flowing motion
+            elif movement_type in ['quarter_circle_left', 'quarter_circle_right']:
+                # Gentle flowing motion during quarter turns
                 positions[sid] = self.home_positions[sid] + random.uniform(-0.2, 0.2) * complement_amplitude
+            elif movement_type == 'spin_burst':
+                # Dynamic random movements during spin bursts
+                positions[sid] = self.home_positions[sid] + random.uniform(-0.4, 0.4) * complement_amplitude
             else:
                 # Default: minimal movement
                 positions[sid] = self.home_positions[sid] + random.uniform(-0.1, 0.1) * complement_amplitude
@@ -832,6 +756,123 @@ class AdvancedDanceNode(Node):
             'base_command': return_base_command
         }
 
+    def update_forward_movement_tracking(self, base_command, duration):
+        """Track forward movement time and enforce 3-second limit - STRICT ENFORCEMENT"""
+        current_time = time.time()
+        linear_x = base_command.get('linear_x', 0.0)
+        
+        # Check if robot is moving forward (positive linear_x > threshold)
+        if linear_x > 0.05:  # Forward movement threshold
+            if not self.is_currently_moving_forward:
+                # Just started moving forward
+                self.forward_start_time = current_time
+                self.is_currently_moving_forward = True
+                self.get_logger().info(f"🔄 Started forward movement - tracking time limit of {self.FORWARD_TIME_LIMIT}s")
+            
+            # Add to total forward time
+            time_since_last_check = current_time - self.last_movement_check_time
+            self.total_forward_time += min(time_since_last_check, duration)  # Don't over-count
+            
+            # Check if we've exceeded the 3-second limit
+            if self.total_forward_time >= self.FORWARD_TIME_LIMIT:
+                self.get_logger().error(f"🚨 FORWARD TIME LIMIT EXCEEDED! {self.total_forward_time:.1f}s >= {self.FORWARD_TIME_LIMIT}s")
+                self.get_logger().error(f"🔄 FORCING BACKWARD MOVEMENT - NO EXCEPTIONS!")
+                return True  # Signal that backward movement is REQUIRED
+                
+        else:
+            # Not moving forward - reset tracking
+            if self.is_currently_moving_forward:
+                self.get_logger().info(f"✅ Forward movement stopped after {self.total_forward_time:.1f}s")
+                self.reset_forward_tracking()
+        
+        self.last_movement_check_time = current_time
+        return False  # No forced backward needed
+    
+    def reset_forward_tracking(self):
+        """Reset forward movement tracking"""
+        self.forward_start_time = None
+        self.total_forward_time = 0.0
+        self.is_currently_moving_forward = False
+        self.get_logger().info("🔄 Forward movement tracking reset")
+    
+    def create_forced_backward_movement(self, duration=1.0):
+        """Create FORCED backward movement to counter forward time limit"""
+        backward_speed = 0.4  # Strong backward speed
+        
+        self.get_logger().error(f"🚨 CREATING FORCED BACKWARD MOVEMENT: {backward_speed} m/s for {duration}s")
+        
+        return {
+            'movement_type': 'forced_backward_enforcement',
+            'category': 'base',
+            'servo_positions': {},  # No servo movement during forced backward
+            'base_command': {
+                'linear_x': -backward_speed,  # NEGATIVE = BACKWARD
+                'linear_y': 0.0,
+                'angular_z': 0.0
+            }
+        }
+
+    def start_keyboard_monitoring(self):
+        """Start monitoring keyboard for 'S' key press"""
+        try:
+            self.original_settings = termios.tcgetattr(sys.stdin)
+            tty.setraw(sys.stdin.fileno())
+            self.keyboard_monitoring = True
+            self.get_logger().info("🎹 Keyboard monitoring started - Press 'S' to stop robot!")
+        except Exception as e:
+            self.get_logger().warn(f"Could not start keyboard monitoring: {e}")
+
+    def stop_keyboard_monitoring(self):
+        """Stop keyboard monitoring and restore terminal"""
+        if self.original_settings:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.original_settings)
+                self.keyboard_monitoring = False
+                self.get_logger().info("🎹 Keyboard monitoring stopped")
+            except Exception as e:
+                self.get_logger().warn(f"Could not restore terminal: {e}")
+
+    def check_keyboard_input(self):
+        """Check for keyboard input without blocking"""
+        if not self.keyboard_monitoring:
+            return None
+            
+        try:
+            if select.select([sys.stdin], [], [], 0)[0]:
+                key = sys.stdin.read(1).lower()
+                return key
+        except Exception:
+            pass
+        return None
+
+    def keyboard_monitor_thread(self):
+        """Thread function to monitor keyboard input"""
+        while self.performance_active and not self.emergency_stop_requested:
+            key = self.check_keyboard_input()
+            if key == 's':
+                self.get_logger().error("🛑 'S' KEY PRESSED - STOPPING ROBOT!")
+                print("\n🛑 'S' KEY DETECTED - EMERGENCY STOPPING ROBOT!")
+                self.emergency_stop_requested = True
+                self.performance_active = False
+                
+                # Send immediate stop commands
+                stop_twist = Twist()
+                stop_twist.linear.x = 0.0
+                stop_twist.linear.y = 0.0
+                stop_twist.angular.z = 0.0
+                
+                for i in range(5):
+                    print(f"🛑 S-key stop command {i+1}/5")
+                    self.cmd_vel_pub.publish(stop_twist)
+                    time.sleep(1.0)
+                
+                self.emergency_stop()
+                break
+            elif key:
+                self.get_logger().info(f"Key pressed: {key} (Press 'S' to stop)")
+            
+            time.sleep(0.1)  # Check every 100ms
+
     def start_performance(self):
         """Start the choreographed performance with robust execution"""
         self.get_logger().info("Starting performance preparation...")
@@ -851,6 +892,12 @@ class AdvancedDanceNode(Node):
             self.home_positions[sid] = self.current_pose.get(sid, 500)
             
         self.get_logger().info(f"Home positions: {self.home_positions}")
+        
+        # Start keyboard monitoring for 'S' key
+        self.start_keyboard_monitoring()
+        
+        # Reset forward movement tracking for fresh start
+        self.reset_forward_tracking()
         
         # Start the buffered execution
         self.execute_with_buffer()
@@ -889,7 +936,12 @@ class AdvancedDanceNode(Node):
         safety_thread = threading.Thread(target=self.safety_monitor, daemon=True)
         safety_thread.start()
         
+        # Start keyboard monitoring thread for 'S' key
+        keyboard_thread = threading.Thread(target=self.keyboard_monitor_thread, daemon=True)
+        keyboard_thread.start()
+        
         self.get_logger().info("Performance started with bulletproof timing system!")
+        self.get_logger().info("🎹 Press 'S' key anytime to stop the robot!")
 
     def safety_monitor(self):
         """Safety monitor that forces stop after song duration"""
@@ -970,14 +1022,15 @@ class AdvancedDanceNode(Node):
                 self.servo_pub_robot2.publish(buffered_movement['servo_msg'])
                 self.get_logger().debug("📡 Sent servo command to both robots")
             
-            # HYBRID DANCING ENABLED - Always send wheel commands for synchronized arms + wheels
+            # PURE SPINNING DANCE - Always send wheel commands for synchronized arms + spins
             if buffered_movement['base_msg']:
+                # NO TRACKING NEEDED - PURE SPINNING HAS NO DISPLACEMENT!
                 self.cmd_vel_pub.publish(buffered_movement['base_msg'])
                 movement_category = buffered_movement['movement_category']
                 if movement_category == 'base':
-                    self.get_logger().debug("🕺 Sent primary wheel dance command")
+                    self.get_logger().debug("🌀 Sent primary spinning dance command")
                 else:
-                    self.get_logger().debug("🤖 Sent complementary wheel movement with arms")
+                    self.get_logger().debug("🤖 Sent complementary spinning movement with arms")
             
             # Log execution (optional, can be disabled for even better performance)
             if len(movement_buffer) < 100:  # Only log for shorter performances
@@ -998,14 +1051,16 @@ class AdvancedDanceNode(Node):
         
         # ADDITIONAL WHEEL STOP after performance - be extra sure
         self.get_logger().info("🛑 Extra wheel stop after performance completion")
+        
         stop_twist = Twist()
         stop_twist.linear.x = 0.0
         stop_twist.linear.y = 0.0
         stop_twist.angular.z = 0.0
         
-        for _ in range(30):
+        for i in range(3):
+            self.get_logger().info(f"🛑 Performance end stop command {i+1}/3")
             self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.01)
+            time.sleep(1.0)
         
         # Wait a moment then return to home
         time.sleep(0.5)
@@ -1018,11 +1073,16 @@ class AdvancedDanceNode(Node):
         self.return_to_home()
         
         # FINAL wheel stop command
-        for _ in range(10):
+        for i in range(3):
+            self.get_logger().info(f"🛑 Final wheel stop {i+1}/3")
             self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.01)
+            time.sleep(1.0)
         
         self.performance_active = False
+        
+        # Stop keyboard monitoring
+        self.stop_keyboard_monitoring()
+        
         self.get_logger().info("✅ Hybrid dance complete - Arms returned to home, wheels STOPPED")
 
     def create_movement_messages(self, movement):
@@ -1042,14 +1102,22 @@ class AdvancedDanceNode(Node):
                 servo_pos.position = float(position)
                 servo_msg.position.append(servo_pos)
         
-        # Create base movement message with QUICK BURST duration constraints
+        # Create base movement message with PURE SPINNING safety check
         base_msg = None
         base_command = movement_commands['base_command']
-        if any(abs(base_command[key]) > 0.01 for key in ['linear_x', 'linear_y', 'angular_z']):  # Threshold for fast movements
+        
+        # 🚨 FINAL SAFETY CHECK: FORCE ZERO LINEAR MOVEMENT! 🚨
+        # This is our last line of defense for 50cm constraint space
+        safe_linear_x = 0.0  # ALWAYS ZERO - NO EXCEPTIONS!
+        safe_linear_y = 0.0  # ALWAYS ZERO - NO EXCEPTIONS!
+        safe_angular_z = float(base_command['angular_z'])  # Only angular allowed
+        
+        # Only create message if there's actual rotation
+        if abs(safe_angular_z) > 0.01:  # Threshold for rotational movements only
             base_msg = Twist()
-            base_msg.linear.x = float(base_command['linear_x'])
-            base_msg.linear.y = float(base_command['linear_y'])
-            base_msg.angular.z = float(base_command['angular_z'])
+            base_msg.linear.x = safe_linear_x   # GUARANTEED ZERO
+            base_msg.linear.y = safe_linear_y   # GUARANTEED ZERO  
+            base_msg.angular.z = safe_angular_z # Only rotation allowed
             
             # SUPER QUICK BURSTS: Force all movements to be very short for constrained space
             movement_duration = movement['duration']
@@ -1068,10 +1136,11 @@ class AdvancedDanceNode(Node):
         stop_twist.linear.y = 0.0
         stop_twist.angular.z = 0.0
         
-        # Send stop commands rapidly and repeatedly
-        for _ in range(20):  # More stop commands to ensure wheels stop
+        # Send stop commands slowly and repeatedly - 1 per second
+        for i in range(5):  # 5 stop commands at 1 second intervals
+            self.get_logger().info(f"🛑 Sending stop command {i+1}/5")
             self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.01)  # Shorter sleep, more frequent
+            time.sleep(1.0)  # 1 second between commands
         
         # FORCE STOP ALL SERVOS - send immediate home command
         self.force_servo_stop()
@@ -1128,9 +1197,10 @@ class AdvancedDanceNode(Node):
             stop_twist.linear.y = 0.0
             stop_twist.angular.z = 0.0
             
-            for _ in range(30):  # Even more stop commands
+            for j in range(3):  # 3 stop commands per emergency attempt
+                self.get_logger().error(f"🛑 Emergency stop command {j+1}/3 in attempt {emergency_attempt + 1}")
                 self.cmd_vel_pub.publish(stop_twist)
-                time.sleep(0.005)  # Very fast publishing
+                time.sleep(1.0)  # 1 second between commands
             
             # Force stop servos immediately
             self.force_servo_stop()
@@ -1149,9 +1219,10 @@ class AdvancedDanceNode(Node):
         stop_twist.linear.y = 0.0  
         stop_twist.angular.z = 0.0
         
-        for _ in range(50):  # MASSIVE number of stop commands
+        for i in range(5):  # 5 final stop commands
+            self.get_logger().error(f"🛑 Final stop command {i+1}/5")
             self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.002)  # Very rapid fire
+            time.sleep(1.0)  # 1 second between commands
         
         # Publish emergency stop signal
         emergency_msg = Bool()
@@ -1159,6 +1230,12 @@ class AdvancedDanceNode(Node):
         for _ in range(5):
             self.emergency_stop_pub.publish(emergency_msg)
             time.sleep(0.02)
+        
+        # Stop keyboard monitoring
+        self.stop_keyboard_monitoring()
+        
+        # Reset forward movement tracking
+        self.reset_forward_tracking()
         
         self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED - WHEELS FORCED STOP")
 
@@ -1248,17 +1325,18 @@ def main():
             node.emergency_stop_requested = True
             node.performance_active = False
             
-            # AGGRESSIVE WHEEL STOPPING for Ctrl+C
+            # SLOW STOP COMMANDS for Ctrl+C - 1 per second
             if hasattr(node, 'cmd_vel_pub'):
                 stop_twist = Twist()
                 stop_twist.linear.x = 0.0
                 stop_twist.linear.y = 0.0
                 stop_twist.angular.z = 0.0
-                print("🛑 SENDING 100 STOP COMMANDS...")
-                for i in range(100):
+                print("🛑 SENDING STOP COMMANDS - 1 PER SECOND...")
+                for i in range(5):
+                    print(f"🛑 Stop command {i+1}/5")
                     node.cmd_vel_pub.publish(stop_twist)
-                    time.sleep(0.001)
-                print("🛑 STOP COMMANDS SENT!")
+                    time.sleep(1.0)  # 1 second delay between commands
+                print("🛑 STOP COMMANDS COMPLETED!")
             
             if hasattr(node, 'emergency_stop'):
                 node.emergency_stop()
