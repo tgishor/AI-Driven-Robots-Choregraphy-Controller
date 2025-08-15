@@ -33,13 +33,13 @@ class AdvancedDanceNode(Node):
             raise FileNotFoundError(self.audio_path)
 
         # Publishers and subscribers
-        self.servo_pub = self.create_publisher(ServosPosition, '/robot_1/servo_controller', 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/robot_1/controller/cmd_vel', 10)
+        self.servo_pub = self.create_publisher(ServosPosition, '/robot_2/servo_controller', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/robot_2/controller/cmd_vel', 10)
         self.emergency_stop_pub = self.create_publisher(Bool, '/dance/emergency_stop', 10)
         
         self.current_pose = {}
         self.pose_received = False
-        self.create_subscription(ServoStateList, '/servo_states', self.servo_state_cb, 10)
+        self.create_subscription(ServoStateList, '/robot_2/controller_manager/servo_states', self.servo_state_cb, 10)
         self.create_subscription(Bool, '/dance/stop_command', self.emergency_stop_cb, 10)
 
         # Robot configuration
