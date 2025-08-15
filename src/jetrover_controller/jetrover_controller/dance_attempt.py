@@ -37,11 +37,13 @@ class AdvancedDanceNode(Node):
             self.get_logger().error(f"Audio file not found: {self.audio_path}")
             raise FileNotFoundError(self.audio_path)
 
-        # Publishers and subscribers - DUAL ROBOT SUPPORT
+        # Publishers and subscribers - TRIPLE ROBOT SUPPORT
         self.servo_pub_robot1 = self.create_publisher(ServosPosition, '/robot_1/servo_controller', 10)
         self.servo_pub_robot2 = self.create_publisher(ServosPosition, '/robot_2/servo_controller', 10)
+        self.servo_pub_robot3 = self.create_publisher(ServosPosition, '/robot_3/servo_controller', 10)
         self.cmd_vel_pub_robot1 = self.create_publisher(Twist, '/robot_1/controller/cmd_vel', 10)
         self.cmd_vel_pub_robot2 = self.create_publisher(Twist, '/robot_2/controller/cmd_vel', 10)
+        self.cmd_vel_pub_robot3 = self.create_publisher(Twist, '/robot_3/controller/cmd_vel', 10)
         self.emergency_stop_pub = self.create_publisher(Bool, '/dance/emergency_stop', 10)
         
         self.current_pose = {}
@@ -86,6 +88,10 @@ class AdvancedDanceNode(Node):
         self.last_spin_direction = None
         self.spin_completion_time = {}  # Track time needed for each spin type
         
+        # Robot_3 specific movement tracking (different mechanism)
+        self.robot3_move_direction = -1  # Alternates between forward/backward for robot_3
+        self.beat_counter = 0  # Track beats for robot_3's every-8-beats pattern
+        
         # Enhanced movement vocabulary including Mecanum-specific movements
         self.movement_types = {
             # Arm-based servo movements
@@ -113,17 +119,18 @@ class AdvancedDanceNode(Node):
         
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
-        self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
+        self.get_logger().info(f"🤖🤖🤖 TRIPLE ROBOT MODE: Commands will be sent to robot_1, robot_2, and robot_3!")
         self.get_logger().info(f"💃 BALANCED DANCE MODE: Prioritizing expressive arm movements with occasional spins!")
         self.get_logger().info(f"🎭 ARM FOCUS: 70-90% arm movements for maximum expression!")
-        self.get_logger().info(f"🌀 SAFE SPINS: Gentle rotations within 50cm space when music peaks!")
+        self.get_logger().info(f"🌀 ROBOT_1&2: Gentle rotations within 50cm space when music peaks!")
+        self.get_logger().info(f"🏃 ROBOT_3: Amplitude-based linear movement (forward/backward) every 8 beats!")
         self.get_logger().info(f"📍 ORIENTATION TRACKING: Robot returns to original facing direction!")
         self.get_logger().info(f"🛑 Multiple Stop Methods: Ctrl+C OR press 'S' key - 1 stop command per second!")
-        self.get_logger().info(f"🎨 EXPRESSIVE CHOREOGRAPHY: Beautiful arm movements with strategic spins!")
+        self.get_logger().info(f"🎨 EXPRESSIVE CHOREOGRAPHY: Beautiful arm movements with strategic movements!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
-        self.get_logger().info("Choreography fully planned and ready for flawless dual robot hybrid dancing!")
+        self.get_logger().info("Choreography fully planned and ready for flawless triple robot hybrid dancing!")
 
     def servo_state_cb(self, msg: ServoStateList):
         for s in msg.servo_state:
@@ -870,8 +877,8 @@ class AdvancedDanceNode(Node):
                 stop_twist.angular.z = 0.0
                 
                 for i in range(5):
-                    print(f"🛑 S-key stop command {i+1}/5 to BOTH robots")
-                    self.publish_wheel_command_to_both_robots(stop_twist)
+                    print(f"🛑 S-key stop command {i+1}/5 to ALL robots")
+                    self.publish_wheel_command_to_all_robots(stop_twist)
                     time.sleep(1.0)
                 
                 self.emergency_stop()
@@ -929,7 +936,8 @@ class AdvancedDanceNode(Node):
                 'base_msg': base_msg,
                 'movement_type': movement['movement_type'],
                 'movement_category': movement['movement_commands']['category'],
-                'duration': movement['duration']
+                'duration': movement['duration'],
+                'features': movement.get('features', {})  # Include segment features for robot_3
             })
         
         # Start audio with high priority and buffer delay
@@ -982,8 +990,8 @@ class AdvancedDanceNode(Node):
                 stop_twist.angular.z = 0.0
                 
                 for i in range(5):
-                    print(f"🛑 S-key stop command {i+1}/5 to BOTH robots")
-                    self.publish_wheel_command_to_both_robots(stop_twist)
+                    print(f"🛑 S-key stop command {i+1}/5 to ALL robots")
+                    self.publish_wheel_command_to_all_robots(stop_twist)
                     time.sleep(1.0)
                 
                 self.emergency_stop()
@@ -1067,23 +1075,24 @@ class AdvancedDanceNode(Node):
                 break
             
             # Execute movement (pre-calculated, no processing delay)
-            # Always publish servo message to BOTH robots (may contain complementary movements)
+            # Always publish servo message to ALL robots (may contain complementary movements)
             if buffered_movement['servo_msg']:
                 self.servo_pub_robot1.publish(buffered_movement['servo_msg'])
                 self.servo_pub_robot2.publish(buffered_movement['servo_msg'])
-                # self.get_logger().debug("📡 Sent servo command to both robots")  # Disabled for audio performance
+                self.servo_pub_robot3.publish(buffered_movement['servo_msg'])
+                # self.get_logger().debug("📡 Sent servo command to all robots")  # Disabled for audio performance
             
             # PURE SPINNING DANCE - Always send wheel commands for synchronized arms + spins
             if buffered_movement['base_msg']:
                 # NO TRACKING NEEDED - PURE SPINNING HAS NO DISPLACEMENT!
-                # Send to BOTH robots for synchronized spinning
-                self.publish_wheel_command_to_both_robots(buffered_movement['base_msg'])
+                # Send to ALL robots (robot_1&2: spins, robot_3: amplitude-based linear)
+                self.publish_wheel_command_to_all_robots(buffered_movement['base_msg'], buffered_movement.get('features', {}))
                 movement_category = buffered_movement['movement_category']
                 # Disable debug logging during performance to prevent audio stuttering
                 # if movement_category == 'base':
-                #     self.get_logger().debug("🌀 Sent primary spinning dance command to BOTH robots")
+                #     self.get_logger().debug("🌀 Sent spinning commands to robot_1&2, linear commands to robot_3")
                 # else:
-                #     self.get_logger().debug("🤖 Sent complementary spinning movement with arms to BOTH robots")
+                #     self.get_logger().debug("🤖 Sent complementary movements to all robots (different per robot)")
                 pass  # No debug logging during performance
             
             # DISABLE LOGGING DURING PERFORMANCE - prevents audio stuttering
@@ -1114,8 +1123,8 @@ class AdvancedDanceNode(Node):
         stop_twist.angular.z = 0.0
         
         for i in range(3):
-            self.get_logger().info(f"🛑 Performance end stop command {i+1}/3 to BOTH robots")
-            self.publish_wheel_command_to_both_robots(stop_twist)
+            self.get_logger().info(f"🛑 Performance end stop command {i+1}/3 to ALL robots")
+            self.publish_wheel_command_to_all_robots(stop_twist)
             time.sleep(1.0)
         
         # Wait a moment then return to home
@@ -1130,8 +1139,8 @@ class AdvancedDanceNode(Node):
         
         # FINAL wheel stop command
         for i in range(3):
-            self.get_logger().info(f"🛑 Final wheel stop {i+1}/3 to BOTH robots")
-            self.publish_wheel_command_to_both_robots(stop_twist)
+            self.get_logger().info(f"🛑 Final wheel stop {i+1}/3 to ALL robots")
+            self.publish_wheel_command_to_all_robots(stop_twist)
             time.sleep(1.0)
         
         self.performance_active = False
@@ -1139,7 +1148,7 @@ class AdvancedDanceNode(Node):
         # Stop keyboard monitoring
         self.stop_keyboard_monitoring()
         
-        self.get_logger().info("✅ Hybrid dance complete - Arms returned to home, wheels STOPPED")
+        self.get_logger().info("✅ Triple robot hybrid dance complete - All arms returned to home, all wheels STOPPED")
 
     def create_movement_messages(self, movement):
         """Pre-create both servo and base messages to eliminate runtime processing"""
@@ -1184,11 +1193,54 @@ class AdvancedDanceNode(Node):
             
         return servo_msg, base_msg
 
-    def publish_wheel_command_to_both_robots(self, twist_msg):
-        """Helper function to publish wheel commands to both robot_1 and robot_2"""
+    def publish_wheel_command_to_all_robots(self, twist_msg, segment_features=None):
+        """Helper function to publish wheel commands to robot_1, robot_2, and robot_3"""
+        # Robot_1 and Robot_2 use the standard spin-based movement
         self.cmd_vel_pub_robot1.publish(twist_msg)
         self.cmd_vel_pub_robot2.publish(twist_msg)
+        
+        # Robot_3 uses different movement logic (amplitude-based linear movement)
+        robot3_twist = self.calculate_robot3_movement(twist_msg, segment_features)
+        self.cmd_vel_pub_robot3.publish(robot3_twist)
     
+    def calculate_robot3_movement(self, original_twist, segment_features):
+        """Calculate robot_3 specific movement - amplitude-based linear movement"""
+        robot3_twist = Twist()
+        
+        # Robot_3 uses amplitude-based linear movement instead of spins
+        if segment_features is not None:
+            # Increment beat counter for robot_3's timing pattern
+            self.beat_counter += 1
+            
+            # Calculate amplitude from musical energy (similar to sample code)
+            energy = segment_features.get('energy', 1.0)
+            brightness = segment_features.get('brightness', 1.0)
+            
+            # Amplitude calculation (similar to sample: amp = (loud / median_loud) * max_delta)
+            amp = energy * brightness * 200.0  # Scale factor for movement intensity
+            
+            # Robot_3 moves every 8th beat when amplitude is high enough (like sample code)
+            if self.beat_counter % 8 == 0 and amp > 200:
+                # Alternate direction (like sample: self.last_move_direction *= -1)
+                self.robot3_move_direction *= -1
+                
+                # Linear movement based on amplitude (like sample: 0.001 * amp * direction)
+                robot3_twist.linear.x = 0.001 * amp * self.robot3_move_direction
+                robot3_twist.linear.y = 0.0
+                robot3_twist.angular.z = 0.0
+                
+                self.get_logger().debug(f"Robot_3 linear movement: {robot3_twist.linear.x:.3f} (amp={amp:.1f}, beat={self.beat_counter})")
+            else:
+                # No movement (like sample: publish Twist() to stop)
+                robot3_twist.linear.x = 0.0
+                robot3_twist.linear.y = 0.0
+                robot3_twist.angular.z = 0.0
+        else:
+            # If no segment features, use original twist for robot_3 (fallback)
+            robot3_twist = original_twist
+        
+        return robot3_twist
+
     def stop_all_movement(self):
         """Stop all servo and base movements immediately"""
         # FORCE STOP BASE MOVEMENTS - send multiple stop commands rapidly
@@ -1199,8 +1251,8 @@ class AdvancedDanceNode(Node):
         
         # Send stop commands slowly and repeatedly - 1 per second to BOTH ROBOTS
         for i in range(5):  # 5 stop commands at 1 second intervals
-            self.get_logger().info(f"🛑 Sending stop command {i+1}/5 to BOTH robots")
-            self.publish_wheel_command_to_both_robots(stop_twist)
+            self.get_logger().info(f"🛑 Sending stop command {i+1}/5 to ALL robots")
+            self.publish_wheel_command_to_all_robots(stop_twist)
             time.sleep(1.0)  # 1 second between commands
         
         # FORCE STOP ALL SERVOS - send immediate home command
@@ -1209,10 +1261,10 @@ class AdvancedDanceNode(Node):
         self.get_logger().info("All movements stopped - wheels and servos")
 
     def force_servo_stop(self):
-        """FORCE all servos to stop immediately - multiple attempts - BOTH ROBOTS"""
-        self.get_logger().warn("🛑 FORCING SERVO STOP ON BOTH ROBOTS!")
+        """FORCE all servos to stop immediately - multiple attempts - ALL ROBOTS"""
+        self.get_logger().warn("🛑 FORCING SERVO STOP ON ALL ROBOTS!")
         
-        # Send stop command 10 times rapidly to both robots
+        # Send stop command 10 times rapidly to all robots
         for attempt in range(10):
             stop_msg = ServosPosition()
             stop_msg.position_unit = 'pulse'
@@ -1224,12 +1276,13 @@ class AdvancedDanceNode(Node):
                 servo_pos.position = 500.0  # Force to center
                 stop_msg.position.append(servo_pos)
             
-            # Send to both robots simultaneously
+            # Send to all robots simultaneously
             self.servo_pub_robot1.publish(stop_msg)
             self.servo_pub_robot2.publish(stop_msg)
+            self.servo_pub_robot3.publish(stop_msg)
             time.sleep(0.05)
         
-        self.get_logger().warn(f"🛑 Sent {10} FORCE STOP commands to BOTH robots!")
+        self.get_logger().warn(f"🛑 Sent {10} FORCE STOP commands to ALL ROBOTS!")
 
     def emergency_stop(self):
         """Instant emergency stop - halts everything immediately"""
@@ -1259,8 +1312,8 @@ class AdvancedDanceNode(Node):
             stop_twist.angular.z = 0.0
             
             for j in range(3):  # 3 stop commands per emergency attempt
-                self.get_logger().error(f"🛑 Emergency stop command {j+1}/3 in attempt {emergency_attempt + 1} to BOTH robots")
-                self.publish_wheel_command_to_both_robots(stop_twist)
+                self.get_logger().error(f"🛑 Emergency stop command {j+1}/3 in attempt {emergency_attempt + 1} to ALL robots")
+                self.publish_wheel_command_to_all_robots(stop_twist)
                 time.sleep(1.0)  # 1 second between commands
             
             # Force stop servos immediately
@@ -1281,8 +1334,8 @@ class AdvancedDanceNode(Node):
         stop_twist.angular.z = 0.0
         
         for i in range(5):  # 5 final stop commands
-            self.get_logger().error(f"🛑 Final stop command {i+1}/5 to BOTH robots")
-            self.publish_wheel_command_to_both_robots(stop_twist)
+            self.get_logger().error(f"🛑 Final stop command {i+1}/5 to ALL robots")
+            self.publish_wheel_command_to_all_robots(stop_twist)
             time.sleep(1.0)  # 1 second between commands
         
         # Publish emergency stop signal
@@ -1301,7 +1354,7 @@ class AdvancedDanceNode(Node):
         self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED - WHEELS FORCED STOP")
 
     def return_to_home(self, emergency=False):
-        """Return all servos to home position - GUARANTEED - BOTH ROBOTS"""
+        """Return all servos to home position - GUARANTEED - ALL ROBOTS"""
         duration = 0.5 if emergency else 2.0
         
         # Create home position command with default 500 position
@@ -1316,13 +1369,14 @@ class AdvancedDanceNode(Node):
             servo_pos.position = 500.0
             home_msg.position.append(servo_pos)
         
-        # Send home command multiple times to both robots to ensure it's received
+        # Send home command multiple times to all robots to ensure it's received
         for i in range(3):
             self.servo_pub_robot1.publish(home_msg)
             self.servo_pub_robot2.publish(home_msg)
+            self.servo_pub_robot3.publish(home_msg)
             time.sleep(0.1)
         
-        self.get_logger().info(f"🏠 Sent home command to BOTH robots - All servos to position 500")
+        self.get_logger().info(f"🏠 Sent home command to ALL ROBOTS - All servos to position 500")
 
     def play_audio(self):
         """Play audio with optimized process management and buffering"""
@@ -1433,8 +1487,8 @@ def main():
                 stop_twist.angular.z = 0.0
                 print("🛑 SENDING STOP COMMANDS - 1 PER SECOND...")
                 for i in range(5):
-                    print(f"🛑 Stop command {i+1}/5 to BOTH robots")
-                    node.publish_wheel_command_to_both_robots(stop_twist)
+                    print(f"🛑 Stop command {i+1}/5 to ALL robots")
+                    node.publish_wheel_command_to_all_robots(stop_twist)
                     time.sleep(1.0)  # 1 second delay between commands
                 print("🛑 STOP COMMANDS COMPLETED!")
             
