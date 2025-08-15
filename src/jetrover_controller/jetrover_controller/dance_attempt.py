@@ -59,6 +59,11 @@ class AdvancedDanceNode(Node):
         self.movement_signatures = {}
         self.musical_features = {}
         
+        # Movement tracking to prevent continuous forward movement
+        self.movement_counter = 0
+        self.accumulated_displacement = {'x': 0.0, 'y': 0.0}
+        self.last_forced_return = 0
+        
         # Enhanced movement vocabulary including Mecanum-specific movements
         self.movement_types = {
             # Arm-based servo movements
@@ -85,11 +90,12 @@ class AdvancedDanceNode(Node):
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
-        self.get_logger().info(f"🕺💃 CONSTRAINED SPACE DANCING: Arms + Wheels synchronized, stays in place!")
-        self.get_logger().info(f"🚀 Speed Limits: Max 1.5 m/s linear (with auto-return), 6.0 rad/s angular for spins!")
-        self.get_logger().info(f"⚡ Super Quick Bursts: Max 0.1s duration + 0.05s auto-return")
-        self.get_logger().info(f"🔄 Auto-Return System: Forward movements automatically return to stay in place!")
-        self.get_logger().info(f"🎲 Random Cool Moves: Fast spins, quick dashes with return, and combo moves!")
+        self.get_logger().info(f"🕺💃 CONTROLLED SPACE DANCING: Arms + Wheels synchronized, FORCED to stay in place!")
+        self.get_logger().info(f"🐌 SLOW Speed Limits: Max 0.5 m/s linear, 3.0 rad/s angular - NO HIGH SPEED!")
+        self.get_logger().info(f"⚡ Super Quick Bursts: Max 0.1s duration")
+        self.get_logger().info(f"🔄 FORCED Return Every 3 Beats: Robot MUST return to center!")
+        self.get_logger().info(f"🛑 Enhanced Ctrl+C Stop: 100+ stop commands to ensure wheels stop!")
+        self.get_logger().info(f"📍 Displacement Tracking: Prevents continuous forward movement!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
@@ -222,30 +228,42 @@ class AdvancedDanceNode(Node):
                     # Calculate movement commands (servo + base)
                     movement_commands = self.calculate_movement_commands(movement_type, segment_features)
                     
-                    # Add the main movement
-                    segments.append({
-                        'start_time': split_start,
-                        'end_time': split_end,
-                        'duration': split_duration,
-                        'movement_type': movement_type,
-                        'movement_commands': movement_commands,
-                        'features': segment_features
-                    })
+                    # TRACK MOVEMENT AND FORCE RETURN EVERY 3 BEATS
+                    self.movement_counter += 1
                     
-                    # ADD AUTOMATIC RETURN MOVEMENT for linear movements to stay in place
-                    if self.has_linear_movement(movement_commands):
-                        return_commands = self.create_return_movement(movement_commands, segment_features)
+                    # Force return movement every 3 beats to prevent continuous displacement
+                    if self.movement_counter % 3 == 0:
+                        # Create forced return to center
+                        return_commands = self.create_forced_return_to_center()
                         if return_commands:
                             return_start = split_end
-                            return_end = split_end + 0.05  # Very quick 0.05s return movement
+                            return_end = split_end + 0.1  # Longer return movement
                             segments.append({
                                 'start_time': return_start,
                                 'end_time': return_end,
-                                'duration': 0.05,
-                                'movement_type': f"return_{movement_type}",
+                                'duration': 0.1,
+                                'movement_type': 'forced_return_to_center',
                                 'movement_commands': return_commands,
                                 'features': segment_features
                             })
+                            self.last_forced_return = self.movement_counter
+                            # Reset displacement tracking
+                            self.accumulated_displacement = {'x': 0.0, 'y': 0.0}
+                    else:
+                        # Add the main movement only if we're not doing a forced return
+                        segments.append({
+                            'start_time': split_start,
+                            'end_time': split_end,
+                            'duration': split_duration,
+                            'movement_type': movement_type,
+                            'movement_commands': movement_commands,
+                            'features': segment_features
+                        })
+                        
+                        # Track displacement
+                        base_cmd = movement_commands.get('base_command', {})
+                        self.accumulated_displacement['x'] += base_cmd.get('linear_x', 0.0) * split_duration
+                        self.accumulated_displacement['y'] += base_cmd.get('linear_y', 0.0) * split_duration
             else:
                 # Normal short segment - keep as is
                 # Extract features for this segment
@@ -512,10 +530,10 @@ class AdvancedDanceNode(Node):
         brightness = features['brightness']
         onset = features['onset_strength']
         
-        # CONSTRAINED SPACE DANCING: Fast but contained movements
-        # Reduced speeds for forward/backward to stay in place, keep spins fast
-        base_speed = min(1.5, energy * 0.8)  # Max 1.5 m/s - FAST but constrained!
-        angular_speed = min(6.0, energy * 3.0)  # Max 6.0 rad/s - FAST SPINS unchanged!
+        # CONSTRAINED SPACE DANCING: MUCH SLOWER controlled movements
+        # Very reduced speeds to prevent continuous forward movement
+        base_speed = min(0.5, energy * 0.2)  # Max 0.5 m/s - MUCH SLOWER!
+        angular_speed = min(3.0, energy * 1.0)  # Max 3.0 rad/s - SLOWER SPINS!
         
         # Add speed boost for high brightness (bright musical passages)
         if brightness > 1.2:
@@ -532,8 +550,8 @@ class AdvancedDanceNode(Node):
         angular_speed *= tempo_scale
         
         # Cap the speeds at maximum after tempo scaling
-        base_speed = min(1.5, base_speed)  # Reduced max linear speed for constrained space
-        angular_speed = min(6.0, angular_speed)  # Keep fast spins
+        base_speed = min(0.5, base_speed)  # MUCH SLOWER max linear speed
+        angular_speed = min(3.0, angular_speed)  # SLOWER max spins
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
@@ -675,17 +693,17 @@ class AdvancedDanceNode(Node):
         energy = features['energy']
         onset = features['onset_strength']
         
-        # Subtle but faster movements that complement arm choreography dynamically
-        base_speed = min(0.8, energy * 0.4)  # More dynamic complementary movements
-        angular_speed = min(2.0, energy * 1.0)  # Faster complementary rotation
+        # Subtle and SLOW movements that complement arm choreography
+        base_speed = min(0.2, energy * 0.1)  # MUCH SLOWER complementary movements
+        angular_speed = min(1.0, energy * 0.5)  # SLOWER complementary rotation
         
         # Apply tempo scaling
         base_speed *= tempo_scale
         angular_speed *= tempo_scale
         
         # Cap the speeds
-        base_speed = min(0.8, base_speed)
-        angular_speed = min(2.0, angular_speed)
+        base_speed = min(0.2, base_speed)
+        angular_speed = min(1.0, angular_speed)
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
@@ -793,6 +811,26 @@ class AdvancedDanceNode(Node):
             }
         
         return None
+
+    def create_forced_return_to_center(self):
+        """Create movement to return robot to center position"""
+        # Calculate return movement based on accumulated displacement
+        return_base_command = {
+            'linear_x': -self.accumulated_displacement['x'] * 2.0,  # Double strength return
+            'linear_y': -self.accumulated_displacement['y'] * 2.0,  # Double strength return
+            'angular_z': 0.0  # No rotation
+        }
+        
+        # Cap return speeds to safe levels
+        return_base_command['linear_x'] = max(-0.8, min(0.8, return_base_command['linear_x']))
+        return_base_command['linear_y'] = max(-0.8, min(0.8, return_base_command['linear_y']))
+        
+        return {
+            'movement_type': 'forced_return_to_center',
+            'category': 'base',
+            'servo_positions': {},  # No servo movement during return
+            'base_command': return_base_command
+        }
 
     def start_performance(self):
         """Start the choreographed performance with robust execution"""
@@ -1203,10 +1241,29 @@ def main():
         rclpy.spin(node)
         
     except KeyboardInterrupt:
+        print("\n🚨 CTRL+C DETECTED - EMERGENCY STOPPING ROBOT!")
         if node:
-            node.get_logger().info("Keyboard interrupt - emergency stopping...")
+            node.get_logger().error("🚨 KEYBOARD INTERRUPT - FORCING IMMEDIATE STOP!")
+            # Force stop everything immediately
+            node.emergency_stop_requested = True
+            node.performance_active = False
+            
+            # AGGRESSIVE WHEEL STOPPING for Ctrl+C
+            if hasattr(node, 'cmd_vel_pub'):
+                stop_twist = Twist()
+                stop_twist.linear.x = 0.0
+                stop_twist.linear.y = 0.0
+                stop_twist.angular.z = 0.0
+                print("🛑 SENDING 100 STOP COMMANDS...")
+                for i in range(100):
+                    node.cmd_vel_pub.publish(stop_twist)
+                    time.sleep(0.001)
+                print("🛑 STOP COMMANDS SENT!")
+            
             if hasattr(node, 'emergency_stop'):
                 node.emergency_stop()
+            
+            print("✅ ROBOT SHOULD BE STOPPED!")
     except Exception as e:
         if node:
             node.get_logger().error(f"Unexpected error: {e}")
