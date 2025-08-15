@@ -44,7 +44,7 @@ class AdvancedDanceNode(Node):
 
         # Robot configuration
         self.servo_ids = [1, 2, 3, 4, 5, 10]
-        self.max_servo_delta = 150.0
+        self.max_servo_delta = 400.0
         self.home_positions = {sid: 500 for sid in self.servo_ids}
         
         # Performance control
@@ -338,7 +338,7 @@ class AdvancedDanceNode(Node):
         
         # Ensure all positions are within safe servo limits
         for sid in positions:
-            positions[sid] = max(150, min(850, positions[sid]))
+            positions[sid] = max(150, min(900, positions[sid]))
             
         return positions
 
@@ -431,7 +431,7 @@ class AdvancedDanceNode(Node):
         
         # Ensure all positions are within safe servo limits
         for sid in positions:
-            positions[sid] = max(150, min(850, positions[sid]))
+            positions[sid] = max(150, min(900, positions[sid]))
             
         return positions
 
@@ -637,7 +637,13 @@ class AdvancedDanceNode(Node):
 
     def play_audio(self):
         """Play audio with proper process management"""
-        cmd = [self.audio_player, '-q', self.audio_path] if self.audio_player == 'mpg123' else [self.audio_player, self.audio_path]
+        if self.audio_player == 'mpg123':
+            cmd = [self.audio_player, '-q', self.audio_path]
+        elif self.audio_player == 'ffplay':
+            cmd = [self.audio_player, '-nodisp', '-autoexit', self.audio_path]
+        else:
+            cmd = [self.audio_player, self.audio_path]
+        
         try:
             self.audio_process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.audio_process.wait()
@@ -649,7 +655,7 @@ class AdvancedDanceNode(Node):
 def main():
     parser = argparse.ArgumentParser(description="Advanced JetRover AI Choreography Engine")
     parser.add_argument('--audio', default=default_audio, help="Path to audio file")
-    parser.add_argument('--player', default='mpg123', choices=['mpg123', 'mpg321', 'mplayer', 'aplay'], help="Audio player")
+    parser.add_argument('--player', default='ffplay', choices=['ffplay', 'mpg123', 'mpg321', 'mplayer', 'aplay'], help="Audio player")
     parser.add_argument('--buffer', type=float, default=2.0, help="Buffer time to prevent performance interruptions")
     parser.add_argument('--start', action='store_true', help="Start performance immediately")
     args, _ = parser.parse_known_args()
