@@ -222,49 +222,42 @@ class AdvancedDanceNode(Node):
         }
 
     def classify_movement_type(self, features):
-        """Classify movement type based on musical features with Mecanum capabilities"""
+        """Classify movement type - ARMS ONLY MODE for safety"""
         energy = features['energy']
         brightness = features['brightness']
         onset = features['onset_strength']
         duration = features['duration']
         
-        # Enhanced intelligent movement classification with base vs servo decisions
+        # ARMS ONLY - All base movements disabled for safety
+        # Map all energy levels to servo movements only
         
-        # Very high energy - explosive movements (often base movements)
-        if energy > 1.8 and brightness > 1.5 and onset > 1.0:
-            return 'explosive_burst'  # Base: quick directional bursts
-        elif energy > 1.5 and brightness > 1.5 and onset > 0.8:
-            return 'spin_in_place'  # Base: high energy rotational movement
+        # Very high energy - powerful arm movements
+        if energy > 1.8 and brightness > 1.5:
+            return 'powerful_strike'  # Servo: maximum intensity arm movement
+        elif energy > 1.5 and brightness > 1.5:
+            return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # High energy movements
-        elif energy > 1.2 and brightness > 1.2 and duration > 0.8:
-            return 'zigzag_dance'  # Base: energetic directional changes
+        # High energy movements - only servos
         elif energy > 1.2 and brightness > 1.2:
             return 'energetic_wave'  # Servo: sharp arm movements
+        elif energy > 1.2:
+            return 'bright_sparkle'  # Servo: quick bright arm movements
         
-        # Medium-high energy with spatial characteristics
-        elif energy > 1.0 and brightness > 1.2 and duration > 0.6:
-            return 'diagonal_drift'  # Base: flowing diagonal movement
-        elif energy > 1.0 and brightness < 0.8 and onset > 0.6:
-            return 'rhythmic_steps'  # Base: rhythmic directional steps
+        # Medium-high energy - servo focused
+        elif energy > 1.0 and brightness > 1.2:
+            return 'flowing_reach'  # Servo: sustained arm movements
         elif energy > 1.0 and brightness < 0.8:
             return 'deep_pulse'  # Servo: rhythmic arm pulses
+        elif energy > 1.0:
+            return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # Medium energy movements
-        elif brightness > 1.3 and energy < 1.2 and duration > 0.5:
-            return 'sideways_slide'  # Base: smooth lateral movement
-        elif brightness > 1.3 and energy < 1.0:
+        # Medium energy movements - only servos
+        elif brightness > 1.3:
             return 'bright_sparkle'  # Servo: quick bright arm movements
-        elif energy > 0.8 and brightness > 0.8 and duration > 0.7:
-            return 'circular_flow'  # Base: sustained circular movement
         elif energy > 0.8 and brightness > 0.8:
             return 'flowing_reach'  # Servo: sustained arm movements
         
-        # Lower energy movements
-        elif energy > 1.0:
-            return 'dramatic_sweep'  # Servo: dramatic arm sweeps
-        elif brightness > 1.0 and duration > 0.8:
-            return 'smooth_glide'  # Base: gentle sustained movement
+        # Lower energy movements - gentle servos
         elif brightness > 1.0:
             return 'subtle_sway'  # Servo: gentle arm sway
         else:
@@ -541,9 +534,9 @@ class AdvancedDanceNode(Node):
             if buffered_movement['servo_msg']:
                 self.servo_pub.publish(buffered_movement['servo_msg'])
             
-            # Publish base movement if this is a base-focused movement
-            if buffered_movement['base_msg'] and buffered_movement['movement_category'] == 'base':
-                self.cmd_vel_pub.publish(buffered_movement['base_msg'])
+            # BASE MOVEMENTS DISABLED FOR SAFETY - Arms only mode
+            # if buffered_movement['base_msg'] and buffered_movement['movement_category'] == 'base':
+            #     self.cmd_vel_pub.publish(buffered_movement['base_msg'])
             
             # Log execution (optional, can be disabled for even better performance)
             if len(movement_buffer) < 100:  # Only log for shorter performances
