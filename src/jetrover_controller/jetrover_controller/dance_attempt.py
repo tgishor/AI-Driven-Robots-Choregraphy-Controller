@@ -22,11 +22,12 @@ from sklearn.cluster import KMeans
 default_audio = '/home/ubuntu/axy_proj/src/jetrover_controller/jetrover_controller/On-The-Floor.mp3'
 
 class AdvancedDanceNode(Node):
-    def __init__(self, audio_path, audio_player='mpg123', buffer_time=2.0):
+    def __init__(self, audio_path, audio_player='mpg123', buffer_time=2.0, energy_scale=0.85):
         super().__init__('advanced_dance_node')
         self.audio_path = audio_path
         self.audio_player = audio_player
         self.buffer_time = buffer_time  # Buffer to prevent mid-performance stops
+        self.energy_scale = energy_scale  # Scale factor for movement intensity (0.1-1.0)
 
         if not os.path.isfile(self.audio_path):
             self.get_logger().error(f"Audio file not found: {self.audio_path}")
@@ -80,7 +81,8 @@ class AdvancedDanceNode(Node):
             'explosive_burst': {'energy': 'very_high', 'brightness': 'very_high', 'pattern': 'sudden', 'type': 'base'}
         }
         
-        self.get_logger().info("Starting comprehensive music analysis...")
+        self.get_logger().info(f"Starting comprehensive music analysis...")
+        self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
@@ -265,8 +267,9 @@ class AdvancedDanceNode(Node):
 
     def calculate_movement_commands(self, movement_type, features):
         """Calculate movement commands for both servo and base movements"""
-        # Base amplitude from musical energy
-        base_amplitude = min(features['energy'] * self.max_servo_delta, self.max_servo_delta)
+        # Base amplitude from musical energy with scaling control
+        scaled_energy = features['energy'] * self.energy_scale
+        base_amplitude = min(scaled_energy * self.max_servo_delta, self.max_servo_delta)
         
         # Determine if this is a servo or base movement
         movement_info = self.movement_types.get(movement_type, {'type': 'servo'})
@@ -680,6 +683,7 @@ def main():
     parser.add_argument('--audio', default=default_audio, help="Path to audio file")
     parser.add_argument('--player', default='ffplay', choices=['ffplay', 'mpg123', 'mpg321', 'mplayer', 'aplay'], help="Audio player")
     parser.add_argument('--buffer', type=float, default=2.0, help="Buffer time to prevent performance interruptions")
+    parser.add_argument('--energy', type=float, default=0.85, help="Energy scale factor (0.1-1.0): lower = gentler movements")
     parser.add_argument('--start', action='store_true', help="Start performance immediately")
     args, _ = parser.parse_known_args()
 
@@ -688,7 +692,7 @@ def main():
     
     try:
         # Create the advanced dance node
-        node = AdvancedDanceNode(args.audio, args.player, args.buffer)
+        node = AdvancedDanceNode(args.audio, args.player, args.buffer, args.energy)
         
         if args.start:
             # Start performance automatically
