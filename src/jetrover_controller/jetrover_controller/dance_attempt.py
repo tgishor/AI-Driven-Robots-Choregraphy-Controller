@@ -85,10 +85,11 @@ class AdvancedDanceNode(Node):
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
-        self.get_logger().info(f"🕺💃 DYNAMIC HYBRID DANCING: Arms + Wheels synchronized to music")
-        self.get_logger().info(f"🚀 Speed Limits: Max 3.0 m/s linear, 6.0 rad/s angular for FAST DYNAMIC dancing!")
-        self.get_logger().info(f"⚡ Quick Bursts: Max 0.25s duration with tempo-based speed scaling")
-        self.get_logger().info(f"🎲 Random Cool Moves: Spins, dashes, diagonals, and combo moves!")
+        self.get_logger().info(f"🕺💃 CONSTRAINED SPACE DANCING: Arms + Wheels synchronized, stays in place!")
+        self.get_logger().info(f"🚀 Speed Limits: Max 1.5 m/s linear (with auto-return), 6.0 rad/s angular for spins!")
+        self.get_logger().info(f"⚡ Super Quick Bursts: Max 0.1s duration + 0.05s auto-return")
+        self.get_logger().info(f"🔄 Auto-Return System: Forward movements automatically return to stay in place!")
+        self.get_logger().info(f"🎲 Random Cool Moves: Fast spins, quick dashes with return, and combo moves!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
@@ -200,8 +201,8 @@ class AdvancedDanceNode(Node):
             if duration < 0.05:
                 continue
             
-            # FORCE SHORT DURATIONS for dynamic dancing - split long segments
-            max_movement_duration = 0.25  # Maximum 0.25 seconds per movement - QUICK BURSTS!
+            # FORCE VERY SHORT DURATIONS for constrained space dancing - split long segments
+            max_movement_duration = 0.1  # Maximum 0.1 seconds per movement - SUPER QUICK BURSTS!
             
             if duration > max_movement_duration:
                 # Split long segments into multiple quick bursts
@@ -221,6 +222,7 @@ class AdvancedDanceNode(Node):
                     # Calculate movement commands (servo + base)
                     movement_commands = self.calculate_movement_commands(movement_type, segment_features)
                     
+                    # Add the main movement
                     segments.append({
                         'start_time': split_start,
                         'end_time': split_end,
@@ -229,6 +231,21 @@ class AdvancedDanceNode(Node):
                         'movement_commands': movement_commands,
                         'features': segment_features
                     })
+                    
+                    # ADD AUTOMATIC RETURN MOVEMENT for linear movements to stay in place
+                    if self.has_linear_movement(movement_commands):
+                        return_commands = self.create_return_movement(movement_commands, segment_features)
+                        if return_commands:
+                            return_start = split_end
+                            return_end = split_end + 0.05  # Very quick 0.05s return movement
+                            segments.append({
+                                'start_time': return_start,
+                                'end_time': return_end,
+                                'duration': 0.05,
+                                'movement_type': f"return_{movement_type}",
+                                'movement_commands': return_commands,
+                                'features': segment_features
+                            })
             else:
                 # Normal short segment - keep as is
                 # Extract features for this segment
@@ -248,6 +265,21 @@ class AdvancedDanceNode(Node):
                     'movement_commands': movement_commands,
                     'features': segment_features
                 })
+                
+                # ADD AUTOMATIC RETURN MOVEMENT for linear movements to stay in place
+                if self.has_linear_movement(movement_commands):
+                    return_commands = self.create_return_movement(movement_commands, segment_features)
+                    if return_commands:
+                        return_start = end_time
+                        return_end = end_time + 0.05  # Very quick 0.05s return movement
+                        segments.append({
+                            'start_time': return_start,
+                            'end_time': return_end,
+                            'duration': 0.05,
+                            'movement_type': f"return_{movement_type}",
+                            'movement_commands': return_commands,
+                            'features': segment_features
+                        })
         
         # Smooth transitions and optimize timing
         self.choreography_timeline = self.optimize_choreography(segments)
@@ -480,10 +512,10 @@ class AdvancedDanceNode(Node):
         brightness = features['brightness']
         onset = features['onset_strength']
         
-        # DYNAMIC DANCING: Fast, energetic movements that match the music
-        # Speed scaling based on musical energy - much faster and more dynamic
-        base_speed = min(3.0, energy * 1.5)  # Max 3.0 m/s - FAST!
-        angular_speed = min(6.0, energy * 3.0)  # Max 6.0 rad/s - FAST SPINS!
+        # CONSTRAINED SPACE DANCING: Fast but contained movements
+        # Reduced speeds for forward/backward to stay in place, keep spins fast
+        base_speed = min(1.5, energy * 0.8)  # Max 1.5 m/s - FAST but constrained!
+        angular_speed = min(6.0, energy * 3.0)  # Max 6.0 rad/s - FAST SPINS unchanged!
         
         # Add speed boost for high brightness (bright musical passages)
         if brightness > 1.2:
@@ -500,8 +532,8 @@ class AdvancedDanceNode(Node):
         angular_speed *= tempo_scale
         
         # Cap the speeds at maximum after tempo scaling
-        base_speed = min(3.0, base_speed)
-        angular_speed = min(6.0, angular_speed)
+        base_speed = min(1.5, base_speed)  # Reduced max linear speed for constrained space
+        angular_speed = min(6.0, angular_speed)  # Keep fast spins
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
@@ -731,6 +763,37 @@ class AdvancedDanceNode(Node):
         
         return optimized
 
+    def has_linear_movement(self, movement_commands):
+        """Check if movement has any linear displacement that needs return"""
+        base_command = movement_commands.get('base_command', {})
+        linear_x = abs(base_command.get('linear_x', 0.0))
+        linear_y = abs(base_command.get('linear_y', 0.0))
+        
+        # Check if there's ANY linear movement (very low threshold for return movement)
+        return linear_x > 0.05 or linear_y > 0.05
+
+    def create_return_movement(self, original_commands, features):
+        """Create return movement to cancel out displacement"""
+        base_command = original_commands.get('base_command', {})
+        
+        # Create exact opposite movement to return to original position
+        return_base_command = {
+            'linear_x': -base_command.get('linear_x', 0.0),  # Opposite direction
+            'linear_y': -base_command.get('linear_y', 0.0),  # Opposite direction
+            'angular_z': 0.0  # Don't reverse spins - they're fine as-is
+        }
+        
+        # Create return movement for ANY linear displacement (very low threshold)
+        if abs(return_base_command['linear_x']) > 0.05 or abs(return_base_command['linear_y']) > 0.05:
+            return {
+                'movement_type': 'return_movement',
+                'category': 'base',
+                'servo_positions': {},  # No servo movement during return
+                'base_command': return_base_command
+            }
+        
+        return None
+
     def start_performance(self):
         """Start the choreographed performance with robust execution"""
         self.get_logger().info("Starting performance preparation...")
@@ -895,6 +958,17 @@ class AdvancedDanceNode(Node):
         # Force stop all movement first
         self.stop_all_movement()
         
+        # ADDITIONAL WHEEL STOP after performance - be extra sure
+        self.get_logger().info("🛑 Extra wheel stop after performance completion")
+        stop_twist = Twist()
+        stop_twist.linear.x = 0.0
+        stop_twist.linear.y = 0.0
+        stop_twist.angular.z = 0.0
+        
+        for _ in range(30):
+            self.cmd_vel_pub.publish(stop_twist)
+            time.sleep(0.01)
+        
         # Wait a moment then return to home
         time.sleep(0.5)
         self.return_to_home()
@@ -905,8 +979,13 @@ class AdvancedDanceNode(Node):
         # Send home command again to be absolutely sure
         self.return_to_home()
         
+        # FINAL wheel stop command
+        for _ in range(10):
+            self.cmd_vel_pub.publish(stop_twist)
+            time.sleep(0.01)
+        
         self.performance_active = False
-        self.get_logger().info("✅ Hybrid dance complete - Arms returned to home, wheels stopped")
+        self.get_logger().info("✅ Hybrid dance complete - Arms returned to home, wheels STOPPED")
 
     def create_movement_messages(self, movement):
         """Pre-create both servo and base messages to eliminate runtime processing"""
@@ -934,27 +1013,32 @@ class AdvancedDanceNode(Node):
             base_msg.linear.y = float(base_command['linear_y'])
             base_msg.angular.z = float(base_command['angular_z'])
             
-            # QUICK BURSTS: Force all movements to be fraction of second for dynamic dancing
+            # SUPER QUICK BURSTS: Force all movements to be very short for constrained space
             movement_duration = movement['duration']
-            if movement_duration > 0.3:  # Maximum 0.3 seconds for ANY movement - QUICK BURSTS!
+            if movement_duration > 0.1:  # Maximum 0.1 seconds for ANY movement - SUPER QUICK!
                 # For longer musical segments, we'll just execute the same fast move for the shorter time
-                # This creates dynamic, punchy movements that don't overshoot
+                # This creates dynamic, punchy movements that stay in place
                 pass  # Keep full speed but movement will be executed for shorter time by the choreography system
             
         return servo_msg, base_msg
 
     def stop_all_movement(self):
         """Stop all servo and base movements immediately"""
-        # Stop base movement multiple times to ensure it stops
+        # FORCE STOP BASE MOVEMENTS - send multiple stop commands rapidly
         stop_twist = Twist()
-        for _ in range(5):
+        stop_twist.linear.x = 0.0
+        stop_twist.linear.y = 0.0
+        stop_twist.angular.z = 0.0
+        
+        # Send stop commands rapidly and repeatedly
+        for _ in range(20):  # More stop commands to ensure wheels stop
             self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.02)
+            time.sleep(0.01)  # Shorter sleep, more frequent
         
         # FORCE STOP ALL SERVOS - send immediate home command
         self.force_servo_stop()
         
-        self.get_logger().info("All movements stopped")
+        self.get_logger().info("All movements stopped - wheels and servos")
 
     def force_servo_stop(self):
         """FORCE all servos to stop immediately - multiple attempts - BOTH ROBOTS"""
@@ -997,24 +1081,39 @@ class AdvancedDanceNode(Node):
                 pass
         
         # FORCE STOP EVERYTHING - multiple rapid attempts
-        for emergency_attempt in range(3):
-            self.get_logger().error(f"🚨 Emergency attempt {emergency_attempt + 1}/3")
+        for emergency_attempt in range(5):  # More attempts
+            self.get_logger().error(f"🚨 Emergency attempt {emergency_attempt + 1}/5")
+            
+            # AGGRESSIVE WHEEL STOPPING - more stop commands
+            stop_twist = Twist()
+            stop_twist.linear.x = 0.0
+            stop_twist.linear.y = 0.0
+            stop_twist.angular.z = 0.0
+            
+            for _ in range(30):  # Even more stop commands
+                self.cmd_vel_pub.publish(stop_twist)
+                time.sleep(0.005)  # Very fast publishing
             
             # Force stop servos immediately
             self.force_servo_stop()
             
-            # Stop base movement
-            stop_twist = Twist()
-            for _ in range(10):
-                self.cmd_vel_pub.publish(stop_twist)
-                time.sleep(0.01)
-            
             # Multiple home commands
             self.return_to_home(emergency=True)
-            time.sleep(0.2)
+            time.sleep(0.1)  # Shorter wait between attempts
         
         # Final home command
         self.return_to_home(emergency=True)
+        
+        # FINAL AGGRESSIVE WHEEL STOP - make absolutely sure wheels stop
+        self.get_logger().error("🛑 FINAL WHEEL STOP - MAKING ABSOLUTELY SURE!")
+        stop_twist = Twist()
+        stop_twist.linear.x = 0.0
+        stop_twist.linear.y = 0.0  
+        stop_twist.angular.z = 0.0
+        
+        for _ in range(50):  # MASSIVE number of stop commands
+            self.cmd_vel_pub.publish(stop_twist)
+            time.sleep(0.002)  # Very rapid fire
         
         # Publish emergency stop signal
         emergency_msg = Bool()
@@ -1023,7 +1122,7 @@ class AdvancedDanceNode(Node):
             self.emergency_stop_pub.publish(emergency_msg)
             time.sleep(0.02)
         
-        self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED")
+        self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED - WHEELS FORCED STOP")
 
     def return_to_home(self, emergency=False):
         """Return all servos to home position - GUARANTEED - BOTH ROBOTS"""
