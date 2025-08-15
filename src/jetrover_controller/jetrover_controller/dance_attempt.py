@@ -33,8 +33,9 @@ class AdvancedDanceNode(Node):
             self.get_logger().error(f"Audio file not found: {self.audio_path}")
             raise FileNotFoundError(self.audio_path)
 
-        # Publishers and subscribers
-        self.servo_pub = self.create_publisher(ServosPosition, '/robot_2/servo_controller', 10)
+        # Publishers and subscribers - DUAL ROBOT SUPPORT
+        self.servo_pub_robot1 = self.create_publisher(ServosPosition, '/robot_1/servo_controller', 10)
+        self.servo_pub_robot2 = self.create_publisher(ServosPosition, '/robot_2/servo_controller', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/robot_2/controller/cmd_vel', 10)
         self.emergency_stop_pub = self.create_publisher(Bool, '/dance/emergency_stop', 10)
         
@@ -83,10 +84,11 @@ class AdvancedDanceNode(Node):
         
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
+        self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
-        self.get_logger().info("Choreography fully planned and ready for flawless execution!")
+        self.get_logger().info("Choreography fully planned and ready for flawless dual robot execution!")
 
     def servo_state_cb(self, msg: ServoStateList):
         for s in msg.servo_state:
@@ -609,9 +611,11 @@ class AdvancedDanceNode(Node):
                 break
             
             # Execute movement (pre-calculated, no processing delay)
-            # Always publish servo message (may contain complementary movements)
+            # Always publish servo message to BOTH robots (may contain complementary movements)
             if buffered_movement['servo_msg']:
-                self.servo_pub.publish(buffered_movement['servo_msg'])
+                self.servo_pub_robot1.publish(buffered_movement['servo_msg'])
+                self.servo_pub_robot2.publish(buffered_movement['servo_msg'])
+                self.get_logger().debug("📡 Sent servo command to both robots")
             
             # BASE MOVEMENTS DISABLED FOR SAFETY - Arms only mode
             # if buffered_movement['base_msg'] and buffered_movement['movement_category'] == 'base':
@@ -689,10 +693,10 @@ class AdvancedDanceNode(Node):
         self.get_logger().info("All movements stopped")
 
     def force_servo_stop(self):
-        """FORCE all servos to stop immediately - multiple attempts"""
-        self.get_logger().warn("🛑 FORCING SERVO STOP!")
+        """FORCE all servos to stop immediately - multiple attempts - BOTH ROBOTS"""
+        self.get_logger().warn("🛑 FORCING SERVO STOP ON BOTH ROBOTS!")
         
-        # Send stop command 10 times rapidly
+        # Send stop command 10 times rapidly to both robots
         for attempt in range(10):
             stop_msg = ServosPosition()
             stop_msg.position_unit = 'pulse'
@@ -704,10 +708,12 @@ class AdvancedDanceNode(Node):
                 servo_pos.position = 500.0  # Force to center
                 stop_msg.position.append(servo_pos)
             
-            self.servo_pub.publish(stop_msg)
+            # Send to both robots simultaneously
+            self.servo_pub_robot1.publish(stop_msg)
+            self.servo_pub_robot2.publish(stop_msg)
             time.sleep(0.05)
         
-        self.get_logger().warn(f"🛑 Sent {10} FORCE STOP commands to servos!")
+        self.get_logger().warn(f"🛑 Sent {10} FORCE STOP commands to BOTH robots!")
 
     def emergency_stop(self):
         """Instant emergency stop - halts everything immediately"""
@@ -756,7 +762,7 @@ class AdvancedDanceNode(Node):
         self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED")
 
     def return_to_home(self, emergency=False):
-        """Return all servos to home position - GUARANTEED"""
+        """Return all servos to home position - GUARANTEED - BOTH ROBOTS"""
         duration = 0.5 if emergency else 2.0
         
         # Create home position command with default 500 position
@@ -771,12 +777,13 @@ class AdvancedDanceNode(Node):
             servo_pos.position = 500.0
             home_msg.position.append(servo_pos)
         
-        # Send home command multiple times to ensure it's received
+        # Send home command multiple times to both robots to ensure it's received
         for i in range(3):
-            self.servo_pub.publish(home_msg)
+            self.servo_pub_robot1.publish(home_msg)
+            self.servo_pub_robot2.publish(home_msg)
             time.sleep(0.1)
         
-        self.get_logger().info(f"🏠 Sent home command - All servos to position 500")
+        self.get_logger().info(f"🏠 Sent home command to BOTH robots - All servos to position 500")
 
     def play_audio(self):
         """Play audio with proper process management"""
