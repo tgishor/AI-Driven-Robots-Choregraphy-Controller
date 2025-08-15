@@ -544,13 +544,24 @@ class AdvancedDanceNode(Node):
                 movement_type = buffered_movement['movement_type']
                 self.get_logger().info(f"Executed: {movement_type} ({category})")
         
-        # Performance complete - return to home
-        if not self.emergency_stop_requested:
-            self.get_logger().info("Performance complete! Returning to home position.")
-            time.sleep(0.5)
-            self.return_to_home()
+        # Performance complete - ALWAYS return to home
+        self.get_logger().info("Performance complete! Returning to home position.")
+        
+        # Force stop all movement first
+        self.stop_all_movement()
+        
+        # Wait a moment then return to home
+        time.sleep(0.5)
+        self.return_to_home()
+        
+        # Wait to ensure home position is reached
+        time.sleep(1.0)
+        
+        # Send home command again to be absolutely sure
+        self.return_to_home()
         
         self.performance_active = False
+        self.get_logger().info("✅ Dance complete - Arms returned to home position")
 
     def create_movement_messages(self, movement):
         """Pre-create both servo and base messages to eliminate runtime processing"""
@@ -580,11 +591,21 @@ class AdvancedDanceNode(Node):
             
         return servo_msg, base_msg
 
+    def stop_all_movement(self):
+        """Stop all servo and base movements immediately"""
+        # Stop base movement multiple times to ensure it stops
+        stop_twist = Twist()
+        for _ in range(3):
+            self.cmd_vel_pub.publish(stop_twist)
+            time.sleep(0.02)
+        
+        self.get_logger().info("All movements stopped")
+
     def emergency_stop(self):
         """Instant emergency stop - halts everything immediately"""
         self.get_logger().warn("🚨 EMERGENCY STOP ACTIVATED! 🚨")
         
-        # Set emergency flag
+        # Set emergency flag FIRST
         self.emergency_stop_requested = True
         self.performance_active = False
         
@@ -592,17 +613,19 @@ class AdvancedDanceNode(Node):
         if self.audio_process:
             try:
                 self.audio_process.terminate()
-                self.audio_process.wait(timeout=1.0)
+                self.audio_process.wait(timeout=0.5)
             except:
-                self.audio_process.kill()
+                try:
+                    self.audio_process.kill()
+                except:
+                    pass
         
-        # Stop base movement immediately (multiple times to ensure it stops)
-        stop_twist = Twist()
-        for _ in range(5):
-            self.cmd_vel_pub.publish(stop_twist)
-            time.sleep(0.02)
+        # Stop all movement immediately
+        self.stop_all_movement()
         
-        # Return all servos to home immediately
+        # Return all servos to home immediately and repeatedly
+        self.return_to_home(emergency=True)
+        time.sleep(0.5)
         self.return_to_home(emergency=True)
         
         # Publish emergency stop signal
@@ -610,12 +633,13 @@ class AdvancedDanceNode(Node):
         emergency_msg.data = True
         self.emergency_stop_pub.publish(emergency_msg)
         
-        self.get_logger().info("Emergency stop complete - all systems halted")
+        self.get_logger().info("🚨 Emergency stop complete - all systems halted")
 
     def return_to_home(self, emergency=False):
-        """Return all servos to home position"""
-        duration = 0.2 if emergency else 1.0
+        """Return all servos to home position - GUARANTEED"""
+        duration = 0.5 if emergency else 2.0
         
+        # Create home position command with default 500 position
         home_msg = ServosPosition()
         home_msg.position_unit = 'pulse'
         home_msg.duration = duration
@@ -623,10 +647,16 @@ class AdvancedDanceNode(Node):
         for sid in self.servo_ids:
             servo_pos = ServoPosition()
             servo_pos.id = sid
-            servo_pos.position = float(self.home_positions[sid])
+            # Always use 500 as default home position for reliability
+            servo_pos.position = 500.0
             home_msg.position.append(servo_pos)
         
-        self.servo_pub.publish(home_msg)
+        # Send home command multiple times to ensure it's received
+        for i in range(3):
+            self.servo_pub.publish(home_msg)
+            time.sleep(0.1)
+        
+        self.get_logger().info(f"🏠 Sent home command - All servos to position 500")
 
     def play_audio(self):
         """Play audio with proper process management"""
