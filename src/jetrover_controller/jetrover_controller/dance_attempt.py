@@ -231,72 +231,85 @@ class AdvancedDanceNode(Node):
             if duration < 0.05:
                 continue
             
-            # Extract features for this segment
-            segment_features = self.extract_segment_features(start_time, end_time)
+            # ALLOW PROPER SPIN COMPLETION - don't split into tiny chunks
+            # Instead, we'll let spins complete based on their natural duration
+            max_movement_duration = 2.0  # Allow up to 2 seconds for complete spins
             
-            # Determine movement type based on musical characteristics
-            movement_type = self.classify_movement_type(segment_features)
-            
-            # Calculate actual duration needed for this movement type
-            if movement_type in self.movement_types:
-                movement_info = self.movement_types[movement_type]
-                if 'rotation' in movement_info:
-                    # Calculate time needed to complete this rotation smoothly
-                    rotation_amount = abs(movement_info['rotation'])
-                    angular_speed = 1.0  # rad/s - smooth rotation speed
-                    needed_duration = rotation_amount / angular_speed
-                    
-                    # Use the calculated duration for complete rotation
-                    if duration < needed_duration:
-                        # If beat duration is shorter, we'll complete the spin across beats
-                        duration = needed_duration
-                        end_time = start_time + duration
-                elif movement_type == 'pause':
-                    # Keep pause duration as is (match the beat)
-                    pass
-                elif movement_type == 'return_to_origin':
-                    # Calculate time needed to return to original orientation
-                    rotation_needed = abs(self.current_orientation)
-                    angular_speed = 1.2  # Slightly faster for returns
-                    duration = rotation_needed / angular_speed
-                    end_time = start_time + duration
-            
-            # Calculate movement commands (servo + base)
-            movement_commands = self.calculate_movement_commands(movement_type, segment_features)
-            
-            # Add the movement
-            segments.append({
-                'start_time': start_time,
-                'end_time': end_time,
-                'duration': duration,
-                'movement_type': movement_type,
-                'movement_commands': movement_commands,
-                'features': segment_features
-            })
-            
-            # Track orientation changes
-            if movement_type in self.movement_types and 'rotation' in self.movement_types[movement_type]:
-                self.current_orientation += self.movement_types[movement_type]['rotation']
+            if duration > max_movement_duration:
+                # For very long segments, create one complete movement
+                # Don't split spins into tiny pieces
+                duration = max_movement_duration
                 
-            # Every 8 beats, consider returning to origin
-            self.movement_counter += 1
-            if self.movement_counter % 8 == 0 and abs(self.current_orientation) > 0.1:
-                # Add a return to origin movement
-                return_start = end_time
-                return_duration = abs(self.current_orientation) / 1.2
-                return_end = return_start + return_duration
+                for split_idx in range(num_splits):
+                    split_start = start_time + (split_idx * split_duration)
+                    split_end = split_start + split_duration
+                    
+                    # Extract features for this split segment
+                    segment_features = self.extract_segment_features(split_start, split_end)
+                    
+                    # Determine movement type based on musical characteristics
+                    movement_type = self.classify_movement_type(segment_features)
+                    
+                    # Calculate movement commands (servo + base)
+                    movement_commands = self.calculate_movement_commands(movement_type, segment_features)
+                    
+                    # TRACK MOVEMENT AND FORCE RETURN EVERY 3 BEATS
+                    self.movement_counter += 1
+                    
+                    # Force return movement every 3 beats to prevent continuous displacement
+                    if self.movement_counter % 3 == 0:
+                        # Create forced return to center
+                        return_commands = self.create_forced_return_to_center()
+                        if return_commands:
+                            return_start = split_end
+                            return_end = split_end + 0.1  # Longer return movement
+                            segments.append({
+                                'start_time': return_start,
+                                'end_time': return_end,
+                                'duration': 0.1,
+                                'movement_type': 'forced_return_to_center',
+                                'movement_commands': return_commands,
+                                'features': segment_features
+                            })
+                            self.last_forced_return = self.movement_counter
+                            # Reset displacement tracking
+                            self.accumulated_displacement = {'x': 0.0, 'y': 0.0}
+                    else:
+                        # Add the main movement only if we're not doing a forced return
+                        segments.append({
+                            'start_time': split_start,
+                            'end_time': split_end,
+                            'duration': split_duration,
+                            'movement_type': movement_type,
+                            'movement_commands': movement_commands,
+                            'features': segment_features
+                        })
+                        
+                        # Track displacement
+                        base_cmd = movement_commands.get('base_command', {})
+                        self.accumulated_displacement['x'] += base_cmd.get('linear_x', 0.0) * split_duration
+                        self.accumulated_displacement['y'] += base_cmd.get('linear_y', 0.0) * split_duration
+            else:
+                # Normal short segment - keep as is
+                # Extract features for this segment
+                segment_features = self.extract_segment_features(start_time, end_time)
+                
+                # Determine movement type based on musical characteristics
+                movement_type = self.classify_movement_type(segment_features)
+                
+                # Calculate movement commands (servo + base)
+                movement_commands = self.calculate_movement_commands(movement_type, segment_features)
                 
                 segments.append({
-                    'start_time': return_start,
-                    'end_time': return_end,
-                    'duration': return_duration,
-                    'movement_type': 'return_to_origin',
-                    'movement_commands': self.calculate_return_to_origin_command(),
-                    'features': {'energy': 0.5, 'brightness': 0.5, 'onset_strength': 0.0, 'duration': return_duration}
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': duration,
+                    'movement_type': movement_type,
+                    'movement_commands': movement_commands,
+                    'features': segment_features
                 })
                 
-                # Reset orientation after return
-                self.current_orientation = 0.0
+                # NO RETURN MOVEMENTS NEEDED - PURE SPINNING HAS NO DISPLACEMENT!
         
         # Smooth transitions and optimize timing
         self.choreography_timeline = self.optimize_choreography(segments)
@@ -339,97 +352,80 @@ class AdvancedDanceNode(Node):
         }
 
     def classify_movement_type(self, features):
-        """Classify movement type - SMOOTH COMPLETE SPINS with pauses"""
+        """Classify movement type - PURE SPINNING DANCE for 50cm constraint space"""
         energy = features['energy']
         brightness = features['brightness']
         onset = features['onset_strength']
         duration = features['duration']
         
-        # Add variety by sometimes choosing pauses (important for natural dance flow)
-        if energy < 0.3 and onset < 0.2:
-            return 'pause'  # Just pause - no movement
+        # PURE SPINNING DANCE - NO LINEAR MOVEMENT EVER!
+        # Map energy and musical features to ONLY rotational movements + arm movements
         
-        # EXPLOSIVE ENERGY - Double spins!
+        # EXPLOSIVE ENERGY - Random rapid spins
         if energy > 1.8 and brightness > 1.5:
             if onset > 0.7:
-                return 'double_spin_left' if self.last_spin_direction != 'left' else 'double_spin_right'
+                return 'spin_burst'  # Base: random explosive spins + arms
             else:
                 return 'powerful_strike'  # Servo: maximum intensity arm movement
                 
-        # VERY HIGH ENERGY - Full spins
+        # VERY HIGH ENERGY - Full circles
         elif energy > 1.5 and brightness > 1.5:
             if onset > 0.6:
-                # Alternate spin directions for variety
-                spin = 'full_spin_left' if brightness > energy else 'full_spin_right'
-                self.last_spin_direction = 'left' if 'left' in spin else 'right'
-                return spin
+                return 'full_circle_left' if brightness > energy else 'full_circle_right'  # Base: full spins + arms
             else:
                 return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # HIGH ENERGY - Half spins or pause
+        # HIGH ENERGY - Half circles
         elif energy > 1.2 and brightness > 1.2:
             if duration > 0.8 and onset > 0.5:
-                # Sometimes pause instead of spinning
-                if self.movement_counter % 3 == 0:
-                    return 'pause'
-                return 'half_spin_left' if brightness > 1.3 else 'half_spin_right'
+                return 'half_circle_left' if brightness > 1.3 else 'half_circle_right'  # Base: half spins + arms
             else:
                 return 'energetic_wave'  # Servo: sharp arm movements
                 
         elif energy > 1.2:
-            # Mix of full spins and pauses
+            # Dynamic spins based on onset
             if onset > 0.6:
-                if self.movement_counter % 4 == 0:
-                    return 'pause'  # Add breathing room
-                return 'full_spin_left' if brightness > energy else 'full_spin_right'
+                return 'spin_left' if brightness > energy else 'spin_right'  # Base: dynamic spins + arms
             else:
                 return 'bright_sparkle'  # Servo: quick bright arm movements
         
-        # MEDIUM ENERGY - Half spins and quarter turns
+        # MEDIUM ENERGY - Controlled spins
         elif energy > 1.0 and brightness > 1.2:
             if duration > 1.0:
-                return 'half_spin_left' if onset > 0.5 else 'half_spin_right'
+                return 'spin_left' if onset > 0.5 else 'spin_right'  # Base: controlled spins + arms
             else:
                 return 'flowing_reach'  # Servo: sustained arm movements
                 
         elif energy > 1.0 and brightness < 0.8:
-            # Gentle quarter turns
+            # Gentle rotations
             if onset > 0.5:
-                return 'quarter_turn_left' if energy > 1.1 else 'quarter_turn_right'
+                return 'quarter_circle_left' if energy > 1.1 else 'quarter_circle_right'  # Base: quarter turns + arms
             else:
                 return 'deep_pulse'  # Servo: rhythmic arm pulses
                 
         elif energy > 1.0:
-            # Mix of movements and pauses
+            # Medium spins
             if duration > 0.6:
-                if self.movement_counter % 5 == 0:
-                    return 'pause'
-                return 'half_spin_right' if brightness > 1.0 else 'half_spin_left'
+                return 'spin_right' if brightness > 1.0 else 'spin_left'  # Base: medium spins + arms
             else:
                 return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # LOWER ENERGY - Quarter turns and pauses
+        # LOWER ENERGY - Gentle rotations
         elif brightness > 1.3:
             # Bright, gentle movements
             if onset > 0.4:
-                return 'quarter_turn_right' if energy > 0.9 else 'quarter_turn_left'
+                return 'quarter_circle_right' if energy > 0.9 else 'quarter_circle_left'  # Base: gentle quarter turns + arms
             else:
                 return 'bright_sparkle'  # Servo: quick bright arm movements
                 
         elif energy > 0.8 and brightness > 0.8:
-            # Balanced energy - mix of turns and pauses
-            if self.movement_counter % 2 == 0:
-                return 'pause'
-            return 'quarter_turn_left' if onset > 0.4 else 'flowing_reach'
+            # Balanced energy - gentle spins
+            return 'quarter_circle_left' if onset > 0.4 else 'flowing_reach'  # Base: very gentle turns OR Servo: flowing arms
         
-        # LOWEST ENERGY - Mostly arms and pauses
+        # LOWEST ENERGY - Arms only or minimal rotation
         elif brightness > 1.0:
-            if self.movement_counter % 3 != 0:
-                return 'pause'
             return 'subtle_sway'  # Servo: gentle arm sway
         else:
-            if self.movement_counter % 2 == 0:
-                return 'pause'
             return 'gentle_wave'  # Servo: soft arm wave
 
     def calculate_movement_commands(self, movement_type, features):
@@ -466,28 +462,6 @@ class AdvancedDanceNode(Node):
             
         return result
 
-    def calculate_return_to_origin_command(self):
-        """Calculate command to return robot to original orientation"""
-        # Calculate angular velocity needed to return smoothly
-        angular_speed = 1.2  # rad/s for returns
-        
-        # Determine direction of return (shortest path)
-        if self.current_orientation > 0:
-            angular_z = -angular_speed  # Turn right to return
-        else:
-            angular_z = angular_speed   # Turn left to return
-            
-        return {
-            'movement_type': 'return_to_origin',
-            'category': 'base',
-            'servo_positions': {},  # No servo movement during return
-            'base_command': {
-                'linear_x': 0.0,
-                'linear_y': 0.0,
-                'angular_z': angular_z
-            }
-        }
-    
     def calculate_tempo_speed_scale(self, tempo):
         """Calculate speed scaling factor based on musical tempo"""
         # Scale movement speed based on BPM for better synchronization
@@ -559,69 +533,89 @@ class AdvancedDanceNode(Node):
         return positions
 
     def calculate_base_movement(self, movement_type, features, tempo_scale=1.0):
-        """Calculate SMOOTH COMPLETE SPINNING movements"""
+        """Calculate PURE SPINNING movements - 50cm constraint space - NO LINEAR MOVEMENT"""
         energy = features['energy']
+        duration = features['duration']
         brightness = features['brightness']
         onset = features['onset_strength']
         
+        # PURE SPINNING DANCE: Only angular velocity, ZERO linear movement
+        # REDUCED SPEEDS: Much gentler and more controlled spinning
+        angular_speed = min(1.2, energy * 0.6)  # Max 1.2 rad/s - much gentler base speed
+        
+        # Add gentle speed boost for high brightness (bright musical passages)
+        if brightness > 1.2:
+            angular_speed *= 1.1  # Only 10% boost for bright sections
+            
+        # Add gentle speed boost for strong onsets (musical accents)  
+        if onset > 0.6:
+            angular_speed *= 1.15  # Only 15% boost for strong beats
+        
+        # Apply TEMPO SCALING for music synchronization
+        angular_speed *= tempo_scale
+        
+        # Cap the speed at maximum after tempo scaling - much lower limit
+        angular_speed = min(1.5, angular_speed)  # Max 1.5 rad/s total
+        
         # 🚨 CRITICAL: ZERO LINEAR MOVEMENT - PURE SPINNING ONLY! 🚨
+        # This GUARANTEES robot stays in 50cm constraint space!
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
-        # Handle pause - no movement at all
-        if movement_type == 'pause':
-            return base_command
+        if movement_type == 'spin_left':
+            # Simple left spin - gentle speed
+            base_command['angular_z'] = angular_speed * 0.6  # Reduced for smoother motion
             
-        # Handle return to origin
-        if movement_type == 'return_to_origin':
-            angular_speed = 1.2  # Smooth return speed
-            if self.current_orientation > 0:
-                base_command['angular_z'] = -angular_speed
-            else:
-                base_command['angular_z'] = angular_speed
-            return base_command
-        
-        # Calculate base angular speed for spins
-        # FIXED SPEEDS for smooth, complete rotations
-        base_angular_speed = 1.0  # rad/s - base speed for consistent spins
-        
-        # Slight adjustments based on music energy
-        if energy > 1.5:
-            base_angular_speed = 1.2  # Slightly faster for high energy
-        elif energy < 0.8:
-            base_angular_speed = 0.8  # Slightly slower for low energy
+        elif movement_type == 'spin_right':
+            # Simple right spin - gentle speed
+            base_command['angular_z'] = -angular_speed * 0.6  # Reduced for smoother motion
             
-        # Apply tempo scaling
-        base_angular_speed *= tempo_scale
-        
-        # Handle different spin types with COMPLETE rotations
-        if movement_type == 'quarter_turn_left':
-            base_command['angular_z'] = base_angular_speed
+        elif movement_type == 'quarter_circle_left':
+            # Gentle left quarter turn (90 degrees)
+            base_command['angular_z'] = angular_speed * 0.3  # Much slower for precision
             
-        elif movement_type == 'quarter_turn_right':
-            base_command['angular_z'] = -base_angular_speed
+        elif movement_type == 'quarter_circle_right':
+            # Gentle right quarter turn (90 degrees)
+            base_command['angular_z'] = -angular_speed * 0.3  # Much slower for precision
             
-        elif movement_type == 'half_spin_left':
-            base_command['angular_z'] = base_angular_speed
+        elif movement_type == 'half_circle_left':
+            # Left half circle (180 degrees)
+            base_command['angular_z'] = angular_speed * 0.5  # Reduced medium speed
             
-        elif movement_type == 'half_spin_right':
-            base_command['angular_z'] = -base_angular_speed
+        elif movement_type == 'half_circle_right':
+            # Right half circle (180 degrees)
+            base_command['angular_z'] = -angular_speed * 0.5  # Reduced medium speed
             
-        elif movement_type == 'full_spin_left':
-            base_command['angular_z'] = base_angular_speed
+        elif movement_type == 'full_circle_left':
+            # Full left circle (360 degrees) - still energetic but controlled
+            base_command['angular_z'] = angular_speed * 0.8  # Reduced from full speed
             
-        elif movement_type == 'full_spin_right':
-            base_command['angular_z'] = -base_angular_speed
+        elif movement_type == 'full_circle_right':
+            # Full right circle (360 degrees) - still energetic but controlled
+            base_command['angular_z'] = -angular_speed * 0.8  # Reduced from full speed
             
-        elif movement_type == 'double_spin_left':
-            # Slightly faster for double spins
-            base_command['angular_z'] = base_angular_speed * 1.2
+        elif movement_type == 'spin_burst':
+            # Dynamic random spinning - controlled intensity
+            burst_intensity = 0.8  # Reduced base intensity  
+            if onset > 0.8:
+                burst_intensity = 1.0  # Less aggressive boost for strong beats
             
-        elif movement_type == 'double_spin_right':
-            # Slightly faster for double spins
-            base_command['angular_z'] = -base_angular_speed * 1.2
+            # Random dynamic spin moves - PURE ROTATION ONLY!
+            spin_moves = [
+                {'angular_z': angular_speed * burst_intensity * 0.7},  # Controlled left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.7},  # Controlled right spin
+                {'angular_z': angular_speed * burst_intensity * 0.5},  # Gentle left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.5},  # Gentle right spin
+                {'angular_z': angular_speed * burst_intensity * 0.9},  # Medium left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.9},  # Medium right spin
+            ]
             
-        # Cap the maximum speed for safety
-        base_command['angular_z'] = max(-1.5, min(1.5, base_command['angular_z']))
+            # Choose random spin direction and intensity
+            chosen_spin = random.choice(spin_moves)
+            
+            # Apply gentler speed limits  
+            chosen_spin['angular_z'] = max(-1.5, min(1.5, chosen_spin['angular_z']))
+            
+            base_command.update(chosen_spin)
             
         return base_command
 
@@ -680,27 +674,24 @@ class AdvancedDanceNode(Node):
         complement_amplitude = base_amplitude * 0.3  # Much gentler than main servo movements
         
         for sid in self.servo_ids:
-            if movement_type == 'pause':
-                # During pause, arms can do gentle movement
-                positions[sid] = self.home_positions[sid] + ((-1) ** sid) * complement_amplitude * 0.2
-            elif movement_type == 'return_to_origin':
-                # Gentle neutral position during return
-                positions[sid] = self.home_positions[sid]
-            elif movement_type in ['quarter_turn_left', 'quarter_turn_right']:
+            if movement_type in ['spin_left', 'spin_right']:
+                # Gentle wave during spins
+                positions[sid] = self.home_positions[sid] + ((-1) ** sid) * complement_amplitude * 0.3
+            elif movement_type in ['full_circle_left', 'full_circle_right']:
+                # Outward reach during full circle spins
+                positions[sid] = self.home_positions[sid] + complement_amplitude * 0.5
+            elif movement_type in ['half_circle_left', 'half_circle_right']:
+                # Medium reach during half circles
+                positions[sid] = self.home_positions[sid] + complement_amplitude * 0.4
+            elif movement_type in ['quarter_circle_left', 'quarter_circle_right']:
                 # Gentle flowing motion during quarter turns
                 positions[sid] = self.home_positions[sid] + random.uniform(-0.2, 0.2) * complement_amplitude
-            elif movement_type in ['half_spin_left', 'half_spin_right']:
-                # Medium reach during half spins
-                positions[sid] = self.home_positions[sid] + complement_amplitude * 0.4
-            elif movement_type in ['full_spin_left', 'full_spin_right']:
-                # Outward reach during full spins
-                positions[sid] = self.home_positions[sid] + complement_amplitude * 0.5
-            elif movement_type in ['double_spin_left', 'double_spin_right']:
-                # Dynamic movements during double spins
-                positions[sid] = self.home_positions[sid] + ((-1) ** sid) * complement_amplitude * 0.6
+            elif movement_type == 'spin_burst':
+                # Dynamic random movements during spin bursts
+                positions[sid] = self.home_positions[sid] + random.uniform(-0.4, 0.4) * complement_amplitude
             else:
-                # Default: home position
-                positions[sid] = self.home_positions[sid]
+                # Default: minimal movement
+                positions[sid] = self.home_positions[sid] + random.uniform(-0.1, 0.1) * complement_amplitude
         
         # Ensure all positions are within safe servo limits
         for sid in positions:
