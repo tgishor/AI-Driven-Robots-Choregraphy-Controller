@@ -693,7 +693,7 @@ class AdvancedDanceNode(Node):
         optimized = []
         
         for i, segment in enumerate(segments):
-            # Add buffer time for smooth transitions
+            # Add buffer time for smooth transitions    
             if i > 0:
                 prev_segment = segments[i-1]
                 # Ensure smooth transition between movements
