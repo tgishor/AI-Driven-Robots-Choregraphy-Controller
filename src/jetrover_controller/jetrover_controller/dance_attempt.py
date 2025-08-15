@@ -85,10 +85,12 @@ class AdvancedDanceNode(Node):
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
+        self.get_logger().info(f"🕺💃 HYBRID DANCING: Arms + Wheels synchronized to music (constrained space)")
+        self.get_logger().info(f"🎯 Movement Limits: Max 0.08 m/s linear, 2.0 rad/s angular for constrained dancing")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
-        self.get_logger().info("Choreography fully planned and ready for flawless dual robot execution!")
+        self.get_logger().info("Choreography fully planned and ready for flawless dual robot hybrid dancing!")
 
     def servo_state_cb(self, msg: ServoStateList):
         for s in msg.servo_state:
@@ -255,42 +257,80 @@ class AdvancedDanceNode(Node):
         }
 
     def classify_movement_type(self, features):
-        """Classify movement type - ARMS ONLY MODE for safety"""
+        """Classify movement type - ARMS + WHEELS for synchronized dancing"""
         energy = features['energy']
         brightness = features['brightness']
         onset = features['onset_strength']
         duration = features['duration']
         
-        # ARMS ONLY - All base movements disabled for safety
-        # Map all energy levels to servo movements only
+        # NEW: ARMS + WHEELS SYNCHRONIZED DANCING
+        # Map energy and musical features to both servo and base movements
         
-        # Very high energy - powerful arm movements
+        # Very high energy - combine powerful arm movements with wheel spins
         if energy > 1.8 and brightness > 1.5:
-            return 'powerful_strike'  # Servo: maximum intensity arm movement
+            # Alternate between powerful arms and full spins based on onset strength
+            if onset > 0.7:
+                return 'explosive_burst'  # Base: quick directional burst + arms
+            else:
+                return 'powerful_strike'  # Servo: maximum intensity arm movement
+                
         elif energy > 1.5 and brightness > 1.5:
-            return 'dramatic_sweep'  # Servo: dramatic arm sweeps
+            # Combine dramatic arms with rotational movements
+            if onset > 0.6:
+                return 'spin_in_place'  # Base: spinning dance + arms
+            else:
+                return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # High energy movements - only servos
+        # High energy movements - mix of arms and wheels
         elif energy > 1.2 and brightness > 1.2:
-            return 'energetic_wave'  # Servo: sharp arm movements
+            # Alternate between energetic arms and lateral dancing
+            if duration > 0.8 and onset > 0.5:
+                return 'zigzag_dance'  # Base: quick directional changes + arms
+            else:
+                return 'energetic_wave'  # Servo: sharp arm movements
+                
         elif energy > 1.2:
-            return 'bright_sparkle'  # Servo: quick bright arm movements
+            # Quick movements - arms or subtle wheel movements
+            if onset > 0.6:
+                return 'rhythmic_steps'  # Base: rhythmic forward/backward + arms
+            else:
+                return 'bright_sparkle'  # Servo: quick bright arm movements
         
-        # Medium-high energy - servo focused
+        # Medium-high energy - balanced arms and wheel movements
         elif energy > 1.0 and brightness > 1.2:
-            return 'flowing_reach'  # Servo: sustained arm movements
+            # Flowing movements
+            if duration > 1.0:
+                return 'diagonal_drift'  # Base: diagonal mecanum movement + arms
+            else:
+                return 'flowing_reach'  # Servo: sustained arm movements
+                
         elif energy > 1.0 and brightness < 0.8:
-            return 'deep_pulse'  # Servo: rhythmic arm pulses
+            # Deep, rhythmic movements
+            if onset > 0.5:
+                return 'circular_flow'  # Base: gentle circular movement + arms
+            else:
+                return 'deep_pulse'  # Servo: rhythmic arm pulses
+                
         elif energy > 1.0:
-            return 'dramatic_sweep'  # Servo: dramatic arm sweeps
+            # Medium energy with mixed movements
+            if duration > 0.6:
+                return 'sideways_slide'  # Base: lateral sliding + arms
+            else:
+                return 'dramatic_sweep'  # Servo: dramatic arm sweeps
         
-        # Medium energy movements - only servos
+        # Medium energy movements - gentle combinations
         elif brightness > 1.3:
-            return 'bright_sparkle'  # Servo: quick bright arm movements
+            # Bright, sparkling movements
+            if onset > 0.4:
+                return 'smooth_glide'  # Base: gentle forward glide + arms
+            else:
+                return 'bright_sparkle'  # Servo: quick bright arm movements
+                
         elif energy > 0.8 and brightness > 0.8:
+            # Balanced energy - flowing movements
             return 'flowing_reach'  # Servo: sustained arm movements
         
-        # Lower energy movements - gentle servos
+        # Lower energy movements - gentle arms with subtle wheel movements
         elif brightness > 1.0:
             return 'subtle_sway'  # Servo: gentle arm sway
         else:
@@ -315,10 +355,12 @@ class AdvancedDanceNode(Node):
         
         if movement_category == 'servo':
             result['servo_positions'] = self.calculate_servo_positions(movement_type, features, base_amplitude)
+            # Add subtle base movement to complement servo movements for hybrid dancing
+            result['base_command'] = self.calculate_subtle_base_complement(movement_type, features)
             
         elif movement_category == 'base':
             result['base_command'] = self.calculate_base_movement(movement_type, features)
-            # Also add subtle servo movements to complement base movement
+            # Also add complementary servo movements to base movement
             result['servo_positions'] = self.calculate_complementary_servo_positions(movement_type, features, base_amplitude)
             
         return result
@@ -370,68 +412,121 @@ class AdvancedDanceNode(Node):
         return positions
 
     def calculate_base_movement(self, movement_type, features):
-        """Calculate Mecanum base movement commands"""
+        """Calculate Mecanum base movement commands - CONSTRAINED SPACE DANCING"""
         energy = features['energy']
         duration = features['duration']
         
-        # Base speed scaling based on energy
-        base_speed = min(0.25, energy * 0.1)  # Max 0.3 m/s
-        angular_speed = min(1.5, energy * 0.8)  # Max 1.5 rad/s
+        # CONSTRAINED SPACE: Very short, quick movements for dancing in place
+        # Maximum speeds much lower to keep robot in small area
+        base_speed = min(0.08, energy * 0.03)  # Max 0.08 m/s (very slow)
+        angular_speed = min(2.0, energy * 1.0)  # Max 2.0 rad/s for spins
+        
+        # Duration constraints for dancing - very short movements
+        movement_duration = min(duration, 0.5)  # Maximum 0.5 seconds per movement
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
         if movement_type == 'sideways_slide':
-            # Smooth lateral movement (left or right based on energy signature)
+            # VERY short lateral slides - like a dance step
             direction = 1 if features['brightness'] > 1.0 else -1
-            base_command['linear_y'] = direction * base_speed * 0.8
+            base_command['linear_y'] = direction * base_speed * 0.6  # Even slower lateral
             
         elif movement_type == 'diagonal_drift':
-            # Diagonal movement - signature Mecanum capability
-            forward_speed = base_speed * 0.7
-            side_speed = base_speed * 0.5
+            # Subtle diagonal movement - signature Mecanum dance move
+            forward_speed = base_speed * 0.4  # Very gentle forward
+            side_speed = base_speed * 0.3  # Very gentle side
             side_direction = 1 if features['onset_strength'] > 0.5 else -1
             base_command['linear_x'] = forward_speed
             base_command['linear_y'] = side_direction * side_speed
             
         elif movement_type == 'spin_in_place':
-            # High energy rotational movement
+            # Dance spins - half spins and full spins based on energy
             spin_direction = 1 if features['brightness'] > features['energy'] else -1
-            base_command['angular_z'] = spin_direction * angular_speed
+            if energy > 1.5:
+                # Full spin for high energy
+                base_command['angular_z'] = spin_direction * angular_speed
+            else:
+                # Half spin for medium energy
+                base_command['angular_z'] = spin_direction * angular_speed * 0.5
             
         elif movement_type == 'circular_flow':
-            # Move forward while rotating - creates circular path
-            base_command['linear_x'] = base_speed * 0.6
+            # Tiny circular movement - like a dance pivot
+            base_command['linear_x'] = base_speed * 0.3  # Very slow forward
             rotation_direction = 1 if features['onset_strength'] > 0.5 else -1
-            base_command['angular_z'] = rotation_direction * angular_speed * 0.5
+            base_command['angular_z'] = rotation_direction * angular_speed * 0.3
             
         elif movement_type == 'zigzag_dance':
-            # Sharp directional changes - alternate between directions
-            # This will be handled as a sequence in the execution
+            # Quick directional changes - dance steps
             direction = random.choice([-1, 1])
             if random.random() > 0.5:
-                base_command['linear_y'] = direction * base_speed
+                # Quick side step
+                base_command['linear_y'] = direction * base_speed * 0.5
             else:
-                base_command['linear_x'] = direction * base_speed * 0.8
+                # Quick forward/backward step
+                base_command['linear_x'] = direction * base_speed * 0.4
                 
         elif movement_type == 'smooth_glide':
-            # Gentle sustained forward movement
-            base_command['linear_x'] = base_speed * 0.4
+            # Very gentle forward glide - like a dance flow
+            base_command['linear_x'] = base_speed * 0.3
             
         elif movement_type == 'rhythmic_steps':
-            # Rhythmic forward/backward steps
+            # Quick rhythmic forward/backward steps - classic dance move
             direction = 1 if features['onset_strength'] > 0.6 else -1
-            base_command['linear_x'] = direction * base_speed * 0.6
+            base_command['linear_x'] = direction * base_speed * 0.5
             
         elif movement_type == 'explosive_burst':
-            # Quick directional burst
+            # Quick directional burst - dance accent move
             directions = [
-                {'linear_x': base_speed, 'linear_y': 0.0},  # Forward
-                {'linear_x': -base_speed, 'linear_y': 0.0},  # Backward
-                {'linear_x': 0.0, 'linear_y': base_speed},  # Left
-                {'linear_x': 0.0, 'linear_y': -base_speed},  # Right
+                {'linear_x': base_speed * 0.6, 'linear_y': 0.0},  # Quick forward
+                {'linear_x': -base_speed * 0.6, 'linear_y': 0.0},  # Quick backward
+                {'linear_x': 0.0, 'linear_y': base_speed * 0.6},  # Quick left
+                {'linear_x': 0.0, 'linear_y': -base_speed * 0.6},  # Quick right
+                {'angular_z': angular_speed * 0.8},  # Quick spin left
+                {'angular_z': -angular_speed * 0.8},  # Quick spin right
             ]
             chosen_direction = random.choice(directions)
             base_command.update(chosen_direction)
+            
+        return base_command
+
+    def calculate_subtle_base_complement(self, movement_type, features):
+        """Calculate subtle wheel movements to complement servo arm movements"""
+        energy = features['energy']
+        onset = features['onset_strength']
+        
+        # Very subtle movements that don't interfere with arm choreography
+        base_speed = min(0.03, energy * 0.01)  # Extremely gentle movements
+        angular_speed = min(0.5, energy * 0.3)  # Gentle rotation
+        
+        base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
+        
+        # Add subtle wheel movements based on arm movement type
+        if movement_type in ['powerful_strike', 'dramatic_sweep']:
+            # Slight rotation during dramatic arm movements
+            direction = 1 if onset > 0.5 else -1
+            base_command['angular_z'] = direction * angular_speed * 0.3
+            
+        elif movement_type in ['energetic_wave', 'bright_sparkle']:
+            # Tiny side shifts during energetic arm movements
+            direction = 1 if energy > 1.0 else -1
+            base_command['linear_y'] = direction * base_speed * 0.5
+            
+        elif movement_type in ['flowing_reach', 'subtle_sway']:
+            # Very gentle forward/backward movement during flowing arms
+            direction = 1 if onset > 0.4 else -1
+            base_command['linear_x'] = direction * base_speed * 0.4
+            
+        elif movement_type == 'deep_pulse':
+            # Slight pulsing movement to match arm pulses
+            if onset > 0.5:
+                base_command['linear_x'] = base_speed * 0.3
+            else:
+                base_command['linear_x'] = -base_speed * 0.3
+                
+        elif movement_type == 'gentle_wave':
+            # Minimal swaying to complement gentle arm waves
+            direction = 1 if features['brightness'] > 1.0 else -1
+            base_command['angular_z'] = direction * angular_speed * 0.2
             
         return base_command
 
@@ -617,9 +712,14 @@ class AdvancedDanceNode(Node):
                 self.servo_pub_robot2.publish(buffered_movement['servo_msg'])
                 self.get_logger().debug("📡 Sent servo command to both robots")
             
-            # BASE MOVEMENTS DISABLED FOR SAFETY - Arms only mode
-            # if buffered_movement['base_msg'] and buffered_movement['movement_category'] == 'base':
-            #     self.cmd_vel_pub.publish(buffered_movement['base_msg'])
+            # HYBRID DANCING ENABLED - Always send wheel commands for synchronized arms + wheels
+            if buffered_movement['base_msg']:
+                self.cmd_vel_pub.publish(buffered_movement['base_msg'])
+                movement_category = buffered_movement['movement_category']
+                if movement_category == 'base':
+                    self.get_logger().debug("🕺 Sent primary wheel dance command")
+                else:
+                    self.get_logger().debug("🤖 Sent complementary wheel movement with arms")
             
             # Log execution (optional, can be disabled for even better performance)
             if len(movement_buffer) < 100:  # Only log for shorter performances
@@ -649,7 +749,7 @@ class AdvancedDanceNode(Node):
         self.return_to_home()
         
         self.performance_active = False
-        self.get_logger().info("✅ Dance complete - Arms returned to home position")
+        self.get_logger().info("✅ Hybrid dance complete - Arms returned to home, wheels stopped")
 
     def create_movement_messages(self, movement):
         """Pre-create both servo and base messages to eliminate runtime processing"""
@@ -668,14 +768,23 @@ class AdvancedDanceNode(Node):
                 servo_pos.position = float(position)
                 servo_msg.position.append(servo_pos)
         
-        # Create base movement message
+        # Create base movement message with duration constraints for dancing
         base_msg = None
         base_command = movement_commands['base_command']
-        if any(abs(base_command[key]) > 0.01 for key in ['linear_x', 'linear_y', 'angular_z']):
+        if any(abs(base_command[key]) > 0.005 for key in ['linear_x', 'linear_y', 'angular_z']):  # Lower threshold for dance movements
             base_msg = Twist()
             base_msg.linear.x = float(base_command['linear_x'])
             base_msg.linear.y = float(base_command['linear_y'])
             base_msg.angular.z = float(base_command['angular_z'])
+            
+            # Constrain movement duration for dancing - limit to very short movements
+            movement_duration = movement['duration']
+            if movement_duration > 0.8:  # Limit long movements for constrained space
+                # Scale down speeds for longer movements to keep robot in place
+                scale_factor = 0.8 / movement_duration
+                base_msg.linear.x *= scale_factor
+                base_msg.linear.y *= scale_factor
+                base_msg.angular.z *= scale_factor
             
         return servo_msg, base_msg
 
