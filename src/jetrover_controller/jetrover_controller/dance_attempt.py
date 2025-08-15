@@ -1344,24 +1344,35 @@ class AdvancedDanceNode(Node):
             # Fallback for other players
             cmd = [self.audio_player, self.audio_path]
         
+        def safe_nice():
+            """Safely adjust process priority without failing if permissions are insufficient"""
+            try:
+                import os
+                # Try to increase priority, but don't fail if we can't
+                os.nice(-5)  # Higher priority for audio
+            except (OSError, PermissionError):
+                # If we can't increase priority, just continue normally
+                pass
+        
         try:
             # Use higher process priority for audio to prevent stuttering
             self.audio_process = subprocess.Popen(
                 cmd, 
                 stdout=subprocess.DEVNULL, 
                 stderr=subprocess.DEVNULL,
-                preexec_fn=lambda: os.nice(-5)  # Higher priority for audio
+                preexec_fn=safe_nice  # Safe priority adjustment
             )
             self.audio_process.wait()
         except Exception as e:
             self.get_logger().error(f"Audio playback error: {e}")
-            # Try fallback audio command without optimization
+            # Try fallback audio command without any priority adjustment
             try:
                 fallback_cmd = [self.audio_player, self.audio_path]
                 self.audio_process = subprocess.Popen(
                     fallback_cmd,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
+                    # No preexec_fn in fallback to avoid any issues
                 )
                 self.audio_process.wait()
             except Exception as e2:
