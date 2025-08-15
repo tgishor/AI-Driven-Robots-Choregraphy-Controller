@@ -95,6 +95,7 @@ class AdvancedDanceNode(Node):
 
     def emergency_stop_cb(self, msg: Bool):
         if msg.data:
+            self.get_logger().warn("🚨 EMERGENCY STOP MESSAGE RECEIVED!")
             self.emergency_stop()
 
     def analyze_complete_song(self):
@@ -171,12 +172,27 @@ class AdvancedDanceNode(Node):
         # Get beat times and features
         beat_times = self.musical_features['beat_times']
         
-        # Analyze each musical segment
+        # Analyze each musical segment - BUT ONLY WITHIN SONG DURATION!
         segments = []
         for i in range(len(beat_times) - 1):
             start_time = beat_times[i]
             end_time = beat_times[i + 1]
+            
+            # 🔥 CRITICAL FIX: Skip beats that start beyond actual song duration
+            if start_time >= self.song_duration:
+                self.get_logger().info(f"⏭️ Skipping beat at {start_time:.1f}s - beyond song duration ({self.song_duration:.1f}s)")
+                break
+            
+            # 🔥 CRITICAL FIX: Limit end_time to actual song duration
+            if end_time > self.song_duration:
+                end_time = self.song_duration
+                self.get_logger().info(f"✂️ Trimming final beat to song duration: {end_time:.1f}s")
+            
             duration = end_time - start_time
+            
+            # Skip very short segments
+            if duration < 0.1:
+                continue
             
             # Extract features for this segment
             segment_features = self.extract_segment_features(start_time, end_time)
@@ -199,7 +215,20 @@ class AdvancedDanceNode(Node):
         # Smooth transitions and optimize timing
         self.choreography_timeline = self.optimize_choreography(segments)
         
-        self.get_logger().info(f"Choreography planned: {len(self.choreography_timeline)} movements with smooth transitions")
+        # Log the actual timeline range
+        if self.choreography_timeline:
+            first_movement = self.choreography_timeline[0]['start_time']
+            last_movement = self.choreography_timeline[-1]['end_time']
+            self.get_logger().info(f"📋 Choreography planned: {len(self.choreography_timeline)} movements")
+            self.get_logger().info(f"⏱️ Timeline: {first_movement:.1f}s to {last_movement:.1f}s (Song: {self.song_duration:.1f}s)")
+            
+            # Verify no movements exceed song duration
+            if last_movement > self.song_duration:
+                self.get_logger().error(f"🚨 ERROR: Movements extend beyond song! Last: {last_movement:.1f}s, Song: {self.song_duration:.1f}s")
+            else:
+                self.get_logger().info(f"✅ All movements within song duration!")
+        else:
+            self.get_logger().warn("⚠️ No choreography movements created!")
 
     def extract_segment_features(self, start_time, end_time):
         """Extract musical features for a specific time segment"""
@@ -501,12 +530,39 @@ class AdvancedDanceNode(Node):
         execution_thread = threading.Thread(target=self.precise_execution, args=(movement_buffer,), daemon=True)
         execution_thread.start()
         
+        # Start safety monitor thread
+        safety_thread = threading.Thread(target=self.safety_monitor, daemon=True)
+        safety_thread.start()
+        
         self.get_logger().info("Performance started with bulletproof timing system!")
 
+    def safety_monitor(self):
+        """Safety monitor that forces stop after song duration"""
+        # Wait for song duration + buffer + safety margin
+        max_time = self.song_duration + self.buffer_time + 3.0
+        
+        self.get_logger().info(f"🛡️ Safety monitor active - will force stop after {max_time:.1f}s")
+        
+        time.sleep(max_time)
+        
+        if self.performance_active:
+            self.get_logger().warn("⏰ SAFETY TIMEOUT - Force stopping dance!")
+            self.emergency_stop_requested = True
+            self.performance_active = False
+            
+            # Force return to home
+            time.sleep(0.5)
+            self.return_to_home(emergency=True)
+
     def play_audio_delayed(self):
-        """Play audio with buffer delay"""
+        """Play audio with buffer delay and monitor completion"""
         time.sleep(self.buffer_time)  # Wait for buffer period
         self.play_audio()
+        
+        # Audio finished - force stop everything immediately
+        self.get_logger().info("🎵 Audio completed - forcing immediate stop!")
+        self.emergency_stop_requested = True
+        self.performance_active = False
 
     def precise_execution(self, movement_buffer):
         """Execute movements with microsecond precision"""
@@ -516,11 +572,26 @@ class AdvancedDanceNode(Node):
         # Get precise start time using performance counter
         start_time = time.perf_counter()
         
-        self.get_logger().info("Precise execution started!")
+        # Calculate maximum safe execution time (song duration + buffer + safety margin)
+        max_execution_time = self.song_duration + self.buffer_time + 5.0
+        
+        self.get_logger().info(f"Precise execution started! Max time: {max_execution_time:.1f}s")
         
         for buffered_movement in movement_buffer:
+            # Check for stop conditions
+            current_time = time.perf_counter() - start_time
+            
             if self.emergency_stop_requested:
-                self.get_logger().info("Emergency stop detected, halting execution")
+                self.get_logger().info("🛑 Emergency stop detected, halting execution")
+                break
+            
+            if current_time > max_execution_time:
+                self.get_logger().warn(f"⏰ Safety timeout reached ({max_execution_time:.1f}s) - stopping dance")
+                self.emergency_stop_requested = True
+                break
+            
+            if not self.performance_active:
+                self.get_logger().info("🎵 Performance deactivated - stopping execution")
                 break
                 
             # Calculate precise target time
@@ -531,6 +602,11 @@ class AdvancedDanceNode(Node):
             sleep_time = target_time - current_time
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            
+            # Final check before executing movement
+            if self.emergency_stop_requested or not self.performance_active:
+                self.get_logger().info("🚫 Stop condition detected - skipping movement")
+                break
             
             # Execute movement (pre-calculated, no processing delay)
             # Always publish servo message (may contain complementary movements)
@@ -546,6 +622,11 @@ class AdvancedDanceNode(Node):
                 category = buffered_movement['movement_category']
                 movement_type = buffered_movement['movement_type']
                 self.get_logger().info(f"Executed: {movement_type} ({category})")
+            
+            # Check for stop after each movement
+            if self.emergency_stop_requested or not self.performance_active:
+                self.get_logger().info("🛑 Stop detected after movement - breaking loop")
+                break
         
         # Performance complete - ALWAYS return to home
         self.get_logger().info("Performance complete! Returning to home position.")
@@ -598,45 +679,81 @@ class AdvancedDanceNode(Node):
         """Stop all servo and base movements immediately"""
         # Stop base movement multiple times to ensure it stops
         stop_twist = Twist()
-        for _ in range(3):
+        for _ in range(5):
             self.cmd_vel_pub.publish(stop_twist)
             time.sleep(0.02)
         
+        # FORCE STOP ALL SERVOS - send immediate home command
+        self.force_servo_stop()
+        
         self.get_logger().info("All movements stopped")
+
+    def force_servo_stop(self):
+        """FORCE all servos to stop immediately - multiple attempts"""
+        self.get_logger().warn("🛑 FORCING SERVO STOP!")
+        
+        # Send stop command 10 times rapidly
+        for attempt in range(10):
+            stop_msg = ServosPosition()
+            stop_msg.position_unit = 'pulse'
+            stop_msg.duration = 0.1  # Very fast movement to stop
+            
+            for sid in self.servo_ids:
+                servo_pos = ServoPosition()
+                servo_pos.id = sid
+                servo_pos.position = 500.0  # Force to center
+                stop_msg.position.append(servo_pos)
+            
+            self.servo_pub.publish(stop_msg)
+            time.sleep(0.05)
+        
+        self.get_logger().warn(f"🛑 Sent {10} FORCE STOP commands to servos!")
 
     def emergency_stop(self):
         """Instant emergency stop - halts everything immediately"""
-        self.get_logger().warn("🚨 EMERGENCY STOP ACTIVATED! 🚨")
+        self.get_logger().error("🚨🚨🚨 EMERGENCY STOP ACTIVATED! 🚨🚨🚨")
         
-        # Set emergency flag FIRST
-        self.emergency_stop_requested = True
-        self.performance_active = False
+        # Set emergency flag FIRST - multiple times
+        for _ in range(5):
+            self.emergency_stop_requested = True
+            self.performance_active = False
         
-        # Stop audio immediately
+        # Kill audio process HARD
         if self.audio_process:
             try:
-                self.audio_process.terminate()
-                self.audio_process.wait(timeout=0.5)
+                self.audio_process.kill()
+                self.audio_process.wait(timeout=0.1)
             except:
-                try:
-                    self.audio_process.kill()
-                except:
-                    pass
+                pass
         
-        # Stop all movement immediately
-        self.stop_all_movement()
+        # FORCE STOP EVERYTHING - multiple rapid attempts
+        for emergency_attempt in range(3):
+            self.get_logger().error(f"🚨 Emergency attempt {emergency_attempt + 1}/3")
+            
+            # Force stop servos immediately
+            self.force_servo_stop()
+            
+            # Stop base movement
+            stop_twist = Twist()
+            for _ in range(10):
+                self.cmd_vel_pub.publish(stop_twist)
+                time.sleep(0.01)
+            
+            # Multiple home commands
+            self.return_to_home(emergency=True)
+            time.sleep(0.2)
         
-        # Return all servos to home immediately and repeatedly
-        self.return_to_home(emergency=True)
-        time.sleep(0.5)
+        # Final home command
         self.return_to_home(emergency=True)
         
         # Publish emergency stop signal
         emergency_msg = Bool()
         emergency_msg.data = True
-        self.emergency_stop_pub.publish(emergency_msg)
+        for _ in range(5):
+            self.emergency_stop_pub.publish(emergency_msg)
+            time.sleep(0.02)
         
-        self.get_logger().info("🚨 Emergency stop complete - all systems halted")
+        self.get_logger().error("🚨 EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED")
 
     def return_to_home(self, emergency=False):
         """Return all servos to home position - GUARANTEED"""
