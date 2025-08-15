@@ -85,8 +85,10 @@ class AdvancedDanceNode(Node):
         self.get_logger().info(f"Starting comprehensive music analysis...")
         self.get_logger().info(f"🎚️ Energy Scale: {self.energy_scale:.2f} (lower = gentler movements)")
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
-        self.get_logger().info(f"🕺💃 HYBRID DANCING: Arms + Wheels synchronized to music (constrained space)")
-        self.get_logger().info(f"🎯 Movement Limits: Max 0.08 m/s linear, 2.0 rad/s angular for constrained dancing")
+        self.get_logger().info(f"🕺💃 DYNAMIC HYBRID DANCING: Arms + Wheels synchronized to music")
+        self.get_logger().info(f"🚀 Speed Limits: Max 3.0 m/s linear, 6.0 rad/s angular for FAST DYNAMIC dancing!")
+        self.get_logger().info(f"⚡ Quick Bursts: Max 0.25s duration with tempo-based speed scaling")
+        self.get_logger().info(f"🎲 Random Cool Moves: Spins, dashes, diagonals, and combo moves!")
         # Complete analysis BEFORE starting any performance
         self.analyze_complete_song()
         self.create_choreography_plan()
@@ -195,26 +197,57 @@ class AdvancedDanceNode(Node):
             duration = end_time - start_time
             
             # Skip very short segments
-            if duration < 0.1:
+            if duration < 0.05:
                 continue
             
-            # Extract features for this segment
-            segment_features = self.extract_segment_features(start_time, end_time)
+            # FORCE SHORT DURATIONS for dynamic dancing - split long segments
+            max_movement_duration = 0.25  # Maximum 0.25 seconds per movement - QUICK BURSTS!
             
-            # Determine movement type based on musical characteristics
-            movement_type = self.classify_movement_type(segment_features)
-            
-            # Calculate movement commands (servo + base)
-            movement_commands = self.calculate_movement_commands(movement_type, segment_features)
-            
-            segments.append({
-                'start_time': start_time,
-                'end_time': end_time,
-                'duration': duration,
-                'movement_type': movement_type,
-                'movement_commands': movement_commands,
-                'features': segment_features
-            })
+            if duration > max_movement_duration:
+                # Split long segments into multiple quick bursts
+                num_splits = int(duration / max_movement_duration) + 1
+                split_duration = duration / num_splits
+                
+                for split_idx in range(num_splits):
+                    split_start = start_time + (split_idx * split_duration)
+                    split_end = split_start + split_duration
+                    
+                    # Extract features for this split segment
+                    segment_features = self.extract_segment_features(split_start, split_end)
+                    
+                    # Determine movement type based on musical characteristics
+                    movement_type = self.classify_movement_type(segment_features)
+                    
+                    # Calculate movement commands (servo + base)
+                    movement_commands = self.calculate_movement_commands(movement_type, segment_features)
+                    
+                    segments.append({
+                        'start_time': split_start,
+                        'end_time': split_end,
+                        'duration': split_duration,
+                        'movement_type': movement_type,
+                        'movement_commands': movement_commands,
+                        'features': segment_features
+                    })
+            else:
+                # Normal short segment - keep as is
+                # Extract features for this segment
+                segment_features = self.extract_segment_features(start_time, end_time)
+                
+                # Determine movement type based on musical characteristics
+                movement_type = self.classify_movement_type(segment_features)
+                
+                # Calculate movement commands (servo + base)
+                movement_commands = self.calculate_movement_commands(movement_type, segment_features)
+                
+                segments.append({
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': duration,
+                    'movement_type': movement_type,
+                    'movement_commands': movement_commands,
+                    'features': segment_features
+                })
         
         # Smooth transitions and optimize timing
         self.choreography_timeline = self.optimize_choreography(segments)
@@ -342,6 +375,10 @@ class AdvancedDanceNode(Node):
         scaled_energy = features['energy'] * self.energy_scale
         base_amplitude = min(scaled_energy * self.max_servo_delta, self.max_servo_delta)
         
+        # Add TEMPO-based speed scaling for better music synchronization
+        tempo = self.musical_features.get('tempo', 120.0)  # Default 120 BPM
+        tempo_scale = self.calculate_tempo_speed_scale(tempo)
+        
         # Determine if this is a servo or base movement
         movement_info = self.movement_types.get(movement_type, {'type': 'servo'})
         movement_category = movement_info['type']
@@ -350,20 +387,45 @@ class AdvancedDanceNode(Node):
             'movement_type': movement_type,
             'category': movement_category,
             'servo_positions': {},
-            'base_command': {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
+            'base_command': {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0},
+            'tempo_scale': tempo_scale  # Pass tempo scaling to movement calculations
         }
         
         if movement_category == 'servo':
             result['servo_positions'] = self.calculate_servo_positions(movement_type, features, base_amplitude)
             # Add subtle base movement to complement servo movements for hybrid dancing
-            result['base_command'] = self.calculate_subtle_base_complement(movement_type, features)
+            result['base_command'] = self.calculate_subtle_base_complement(movement_type, features, tempo_scale)
             
         elif movement_category == 'base':
-            result['base_command'] = self.calculate_base_movement(movement_type, features)
+            result['base_command'] = self.calculate_base_movement(movement_type, features, tempo_scale)
             # Also add complementary servo movements to base movement
             result['servo_positions'] = self.calculate_complementary_servo_positions(movement_type, features, base_amplitude)
             
         return result
+
+    def calculate_tempo_speed_scale(self, tempo):
+        """Calculate speed scaling factor based on musical tempo"""
+        # Scale movement speed based on BPM for better synchronization
+        # Faster songs = faster movements, slower songs = more controlled movements
+        
+        if tempo < 80:
+            # Very slow songs (ballads) - controlled movements
+            return 0.6
+        elif tempo < 100:
+            # Slow songs - moderate movements  
+            return 0.8
+        elif tempo < 120:
+            # Medium tempo - normal speed
+            return 1.0
+        elif tempo < 140:
+            # Upbeat songs - faster movements
+            return 1.3
+        elif tempo < 160:
+            # Fast songs - very dynamic
+            return 1.6
+        else:
+            # Very fast songs (EDM, etc.) - MAXIMUM ENERGY!
+            return 2.0
 
     def calculate_servo_positions(self, movement_type, features, base_amplitude):
         """Calculate precise servo positions for servo-focused movements"""
@@ -411,92 +473,187 @@ class AdvancedDanceNode(Node):
             
         return positions
 
-    def calculate_base_movement(self, movement_type, features):
-        """Calculate Mecanum base movement commands - CONSTRAINED SPACE DANCING"""
+    def calculate_base_movement(self, movement_type, features, tempo_scale=1.0):
+        """Calculate Mecanum base movement commands - DYNAMIC FAST DANCING"""
         energy = features['energy']
         duration = features['duration']
+        brightness = features['brightness']
+        onset = features['onset_strength']
         
-        # CONSTRAINED SPACE: Very short, quick movements for dancing in place
-        # Maximum speeds much lower to keep robot in small area
-        base_speed = min(0.08, energy * 0.03)  # Max 0.08 m/s (very slow)
-        angular_speed = min(2.0, energy * 1.0)  # Max 2.0 rad/s for spins
+        # DYNAMIC DANCING: Fast, energetic movements that match the music
+        # Speed scaling based on musical energy - much faster and more dynamic
+        base_speed = min(3.0, energy * 1.5)  # Max 3.0 m/s - FAST!
+        angular_speed = min(6.0, energy * 3.0)  # Max 6.0 rad/s - FAST SPINS!
         
-        # Duration constraints for dancing - very short movements
-        movement_duration = min(duration, 0.5)  # Maximum 0.5 seconds per movement
+        # Add speed boost for high brightness (bright musical passages)
+        if brightness > 1.2:
+            base_speed *= 1.3  # 30% speed boost for bright sections
+            angular_speed *= 1.2  # 20% spin boost
+            
+        # Add speed boost for strong onsets (musical accents)
+        if onset > 0.6:
+            base_speed *= 1.2  # 20% speed boost for strong beats
+            angular_speed *= 1.4  # 40% spin boost for accents
+        
+        # Apply TEMPO SCALING for music synchronization
+        base_speed *= tempo_scale
+        angular_speed *= tempo_scale
+        
+        # Cap the speeds at maximum after tempo scaling
+        base_speed = min(3.0, base_speed)
+        angular_speed = min(6.0, angular_speed)
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
         if movement_type == 'sideways_slide':
-            # VERY short lateral slides - like a dance step
+            # FAST lateral slides - dynamic side steps
             direction = 1 if features['brightness'] > 1.0 else -1
-            base_command['linear_y'] = direction * base_speed * 0.6  # Even slower lateral
+            base_command['linear_y'] = direction * base_speed * 0.9  # Fast lateral movement
             
         elif movement_type == 'diagonal_drift':
-            # Subtle diagonal movement - signature Mecanum dance move
-            forward_speed = base_speed * 0.4  # Very gentle forward
-            side_speed = base_speed * 0.3  # Very gentle side
+            # FAST diagonal movement - signature Mecanum dance move
+            forward_speed = base_speed * 0.8  # Fast forward component
+            side_speed = base_speed * 0.7  # Fast side component
             side_direction = 1 if features['onset_strength'] > 0.5 else -1
             base_command['linear_x'] = forward_speed
             base_command['linear_y'] = side_direction * side_speed
             
         elif movement_type == 'spin_in_place':
-            # Dance spins - half spins and full spins based on energy
+            # COOL FAST SPINS - Dynamic rotations with variations
             spin_direction = 1 if features['brightness'] > features['energy'] else -1
-            if energy > 1.5:
-                # Full spin for high energy
-                base_command['angular_z'] = spin_direction * angular_speed
+            
+            # Dynamic spin variations based on musical features
+            if energy > 1.8 and onset > 0.7:
+                # MAXIMUM INTENSITY SPIN - Full speed with random direction changes
+                if random.random() > 0.7:
+                    spin_direction *= -1  # Surprise direction change!
+                base_command['angular_z'] = spin_direction * angular_speed  # FULL SPEED!
+            elif energy > 1.5:
+                # HIGH ENERGY SPIN - Fast with potential direction variation
+                if onset > 0.6 and random.random() > 0.8:
+                    spin_direction *= -1  # Occasional direction change
+                base_command['angular_z'] = spin_direction * angular_speed * 0.9
+            elif energy > 1.0:
+                # MEDIUM ENERGY SPIN - Good speed
+                base_command['angular_z'] = spin_direction * angular_speed * 0.7
             else:
-                # Half spin for medium energy
+                # CONTROLLED SPIN - Still fast but controlled
                 base_command['angular_z'] = spin_direction * angular_speed * 0.5
             
         elif movement_type == 'circular_flow':
-            # Tiny circular movement - like a dance pivot
-            base_command['linear_x'] = base_speed * 0.3  # Very slow forward
+            # FAST circular movement - dynamic dance pivot
+            base_command['linear_x'] = base_speed * 0.7  # Fast forward
             rotation_direction = 1 if features['onset_strength'] > 0.5 else -1
-            base_command['angular_z'] = rotation_direction * angular_speed * 0.3
+            base_command['angular_z'] = rotation_direction * angular_speed * 0.6
             
         elif movement_type == 'zigzag_dance':
-            # Quick directional changes - dance steps
+            # DYNAMIC directional changes - COOL RANDOM dance steps
             direction = random.choice([-1, 1])
-            if random.random() > 0.5:
-                # Quick side step
-                base_command['linear_y'] = direction * base_speed * 0.5
+            move_choice = random.random()
+            
+            if onset > 0.7:
+                # SUPER DYNAMIC moves for strong beats
+                if move_choice > 0.8:
+                    # COMBO MOVE: Side + spin
+                    base_command['linear_y'] = direction * base_speed * 0.8
+                    base_command['angular_z'] = -direction * angular_speed * 0.4
+                elif move_choice > 0.6:
+                    # COMBO MOVE: Forward + spin
+                    base_command['linear_x'] = direction * base_speed * 0.8
+                    base_command['angular_z'] = direction * angular_speed * 0.5
+                elif move_choice > 0.4:
+                    # DIAGONAL DASH
+                    base_command['linear_x'] = direction * base_speed * 0.7
+                    base_command['linear_y'] = -direction * base_speed * 0.7
+                else:
+                    # PURE SPIN
+                    base_command['angular_z'] = direction * angular_speed * 0.8
             else:
-                # Quick forward/backward step
-                base_command['linear_x'] = direction * base_speed * 0.4
+                # STANDARD zigzag moves
+                if move_choice > 0.66:
+                    # FAST side step
+                    base_command['linear_y'] = direction * base_speed * 0.9
+                elif move_choice > 0.33:
+                    # FAST forward/backward step
+                    base_command['linear_x'] = direction * base_speed * 0.9
+                else:
+                    # FAST spin move
+                    base_command['angular_z'] = direction * angular_speed * 0.7
                 
         elif movement_type == 'smooth_glide':
-            # Very gentle forward glide - like a dance flow
-            base_command['linear_x'] = base_speed * 0.3
+            # FAST forward glide - dynamic flow
+            base_command['linear_x'] = base_speed * 0.8
             
         elif movement_type == 'rhythmic_steps':
-            # Quick rhythmic forward/backward steps - classic dance move
+            # FAST rhythmic forward/backward steps - DYNAMIC dance move
             direction = 1 if features['onset_strength'] > 0.6 else -1
-            base_command['linear_x'] = direction * base_speed * 0.5
+            base_command['linear_x'] = direction * base_speed * 0.9
             
         elif movement_type == 'explosive_burst':
-            # Quick directional burst - dance accent move
-            directions = [
-                {'linear_x': base_speed * 0.6, 'linear_y': 0.0},  # Quick forward
-                {'linear_x': -base_speed * 0.6, 'linear_y': 0.0},  # Quick backward
-                {'linear_x': 0.0, 'linear_y': base_speed * 0.6},  # Quick left
-                {'linear_x': 0.0, 'linear_y': -base_speed * 0.6},  # Quick right
-                {'angular_z': angular_speed * 0.8},  # Quick spin left
-                {'angular_z': -angular_speed * 0.8},  # Quick spin right
+            # EXPLOSIVE directional burst - MAXIMUM COOL FACTOR!
+            burst_intensity = 1.0
+            if onset > 0.8:
+                burst_intensity = 1.2  # Even more intense for very strong beats
+            
+            # Create an extensive list of cool burst moves
+            burst_moves = [
+                # Basic directional bursts
+                {'linear_x': base_speed * burst_intensity, 'linear_y': 0.0},  # FAST forward dash
+                {'linear_x': -base_speed * burst_intensity, 'linear_y': 0.0},  # FAST backward dash
+                {'linear_x': 0.0, 'linear_y': base_speed * burst_intensity},  # FAST left dash
+                {'linear_x': 0.0, 'linear_y': -base_speed * burst_intensity},  # FAST right dash
+                
+                # Pure spins
+                {'angular_z': angular_speed * burst_intensity},  # FAST spin left
+                {'angular_z': -angular_speed * burst_intensity},  # FAST spin right
+                
+                # Diagonal dashes - signature Mecanum moves
+                {'linear_x': base_speed * 0.8, 'linear_y': base_speed * 0.8},  # Northeast dash
+                {'linear_x': -base_speed * 0.8, 'linear_y': -base_speed * 0.8},  # Southwest dash
+                {'linear_x': base_speed * 0.8, 'linear_y': -base_speed * 0.8},  # Southeast dash
+                {'linear_x': -base_speed * 0.8, 'linear_y': base_speed * 0.8},  # Northwest dash
+                
+                # COMBO MOVES - Linear + Angular (MOST COOL!)
+                {'linear_x': base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Forward + spin left
+                {'linear_x': base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Forward + spin right
+                {'linear_x': -base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Backward + spin left
+                {'linear_x': -base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Backward + spin right
+                {'linear_y': base_speed * 0.7, 'angular_z': angular_speed * 0.6},  # Left + spin
+                {'linear_y': -base_speed * 0.7, 'angular_z': -angular_speed * 0.6},  # Right + spin
+                
+                # COMPLEX COMBOS for very high energy
+                {'linear_x': base_speed * 0.6, 'linear_y': base_speed * 0.6, 'angular_z': angular_speed * 0.4},  # Diagonal + spin
+                {'linear_x': -base_speed * 0.6, 'linear_y': -base_speed * 0.6, 'angular_z': -angular_speed * 0.4},  # Diagonal back + spin
             ]
-            chosen_direction = random.choice(directions)
-            base_command.update(chosen_direction)
+            
+            # Choose move based on energy level
+            if energy > 1.7 and len(burst_moves) > 8:
+                # High energy - prefer complex combo moves
+                chosen_move = random.choice(burst_moves[8:])  # Complex moves only
+            else:
+                # Normal energy - any move
+                chosen_move = random.choice(burst_moves)
+                
+            base_command.update(chosen_move)
             
         return base_command
 
-    def calculate_subtle_base_complement(self, movement_type, features):
+    def calculate_subtle_base_complement(self, movement_type, features, tempo_scale=1.0):
         """Calculate subtle wheel movements to complement servo arm movements"""
         energy = features['energy']
         onset = features['onset_strength']
         
-        # Very subtle movements that don't interfere with arm choreography
-        base_speed = min(0.03, energy * 0.01)  # Extremely gentle movements
-        angular_speed = min(0.5, energy * 0.3)  # Gentle rotation
+        # Subtle but faster movements that complement arm choreography dynamically
+        base_speed = min(0.8, energy * 0.4)  # More dynamic complementary movements
+        angular_speed = min(2.0, energy * 1.0)  # Faster complementary rotation
+        
+        # Apply tempo scaling
+        base_speed *= tempo_scale
+        angular_speed *= tempo_scale
+        
+        # Cap the speeds
+        base_speed = min(0.8, base_speed)
+        angular_speed = min(2.0, angular_speed)
         
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
@@ -768,23 +925,21 @@ class AdvancedDanceNode(Node):
                 servo_pos.position = float(position)
                 servo_msg.position.append(servo_pos)
         
-        # Create base movement message with duration constraints for dancing
+        # Create base movement message with QUICK BURST duration constraints
         base_msg = None
         base_command = movement_commands['base_command']
-        if any(abs(base_command[key]) > 0.005 for key in ['linear_x', 'linear_y', 'angular_z']):  # Lower threshold for dance movements
+        if any(abs(base_command[key]) > 0.01 for key in ['linear_x', 'linear_y', 'angular_z']):  # Threshold for fast movements
             base_msg = Twist()
             base_msg.linear.x = float(base_command['linear_x'])
             base_msg.linear.y = float(base_command['linear_y'])
             base_msg.angular.z = float(base_command['angular_z'])
             
-            # Constrain movement duration for dancing - limit to very short movements
+            # QUICK BURSTS: Force all movements to be fraction of second for dynamic dancing
             movement_duration = movement['duration']
-            if movement_duration > 0.8:  # Limit long movements for constrained space
-                # Scale down speeds for longer movements to keep robot in place
-                scale_factor = 0.8 / movement_duration
-                base_msg.linear.x *= scale_factor
-                base_msg.linear.y *= scale_factor
-                base_msg.angular.z *= scale_factor
+            if movement_duration > 0.3:  # Maximum 0.3 seconds for ANY movement - QUICK BURSTS!
+                # For longer musical segments, we'll just execute the same fast move for the shorter time
+                # This creates dynamic, punchy movements that don't overshoot
+                pass  # Keep full speed but movement will be executed for shorter time by the choreography system
             
         return servo_msg, base_msg
 
