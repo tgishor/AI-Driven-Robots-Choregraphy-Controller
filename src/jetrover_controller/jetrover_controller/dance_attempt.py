@@ -40,7 +40,8 @@ class AdvancedDanceNode(Node):
         # Publishers and subscribers - DUAL ROBOT SUPPORT
         self.servo_pub_robot1 = self.create_publisher(ServosPosition, '/robot_1/servo_controller', 10)
         self.servo_pub_robot2 = self.create_publisher(ServosPosition, '/robot_2/servo_controller', 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/robot_2/controller/cmd_vel', 10)
+        self.cmd_vel_pub_robot1 = self.create_publisher(Twist, '/robot_1/controller/cmd_vel', 10)
+        self.cmd_vel_pub_robot2 = self.create_publisher(Twist, '/robot_2/controller/cmd_vel', 10)
         self.emergency_stop_pub = self.create_publisher(Bool, '/dance/emergency_stop', 10)
         
         self.current_pose = {}
@@ -108,7 +109,7 @@ class AdvancedDanceNode(Node):
         self.get_logger().info(f"🤖🤖 DUAL ROBOT MODE: Commands will be sent to both robot_1 and robot_2!")
         self.get_logger().info(f"🌀 PURE SPINNING DANCE: 50cm constraint space - ZERO LINEAR MOVEMENT!")
         self.get_logger().info(f"🔄 SPIN-ONLY MODES: Left spins, Right spins, Half circles, Quarter circles, Full circles!")
-        self.get_logger().info(f"🎯 ROTATION SPEEDS: Max 3.0 rad/s - Dynamic spin variations based on music!")
+        self.get_logger().info(f"🎯 ROTATION SPEEDS: Max 1.5 rad/s - GENTLE, smooth spin variations based on music!")
         self.get_logger().info(f"📍 STATIONARY DANCING: Robot stays in exact same position - only rotates!")
         self.get_logger().info(f"🛑 Multiple Stop Methods: Ctrl+C OR press 'S' key - 1 stop command per second!")
         self.get_logger().info(f"🌪️ NO DISPLACEMENT: Arms + Pure rotational wheel movements only!")
@@ -531,79 +532,80 @@ class AdvancedDanceNode(Node):
         onset = features['onset_strength']
         
         # PURE SPINNING DANCE: Only angular velocity, ZERO linear movement
-        angular_speed = min(3.0, energy * 1.2)  # Max 3.0 rad/s based on energy
+        # REDUCED SPEEDS: Much gentler and more controlled spinning
+        angular_speed = min(1.2, energy * 0.6)  # Max 1.2 rad/s - much gentler base speed
         
-        # Add speed boost for high brightness (bright musical passages)
+        # Add gentle speed boost for high brightness (bright musical passages)
         if brightness > 1.2:
-            angular_speed *= 1.3  # 30% spin boost for bright sections
+            angular_speed *= 1.1  # Only 10% boost for bright sections
             
-        # Add speed boost for strong onsets (musical accents)
+        # Add gentle speed boost for strong onsets (musical accents)  
         if onset > 0.6:
-            angular_speed *= 1.4  # 40% spin boost for strong beats
+            angular_speed *= 1.15  # Only 15% boost for strong beats
         
         # Apply TEMPO SCALING for music synchronization
         angular_speed *= tempo_scale
         
-        # Cap the speed at maximum after tempo scaling
-        angular_speed = min(3.0, angular_speed)
+        # Cap the speed at maximum after tempo scaling - much lower limit
+        angular_speed = min(1.5, angular_speed)  # Max 1.5 rad/s total
         
         # 🚨 CRITICAL: ZERO LINEAR MOVEMENT - PURE SPINNING ONLY! 🚨
         # This GUARANTEES robot stays in 50cm constraint space!
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
         if movement_type == 'spin_left':
-            # Simple left spin
-            base_command['angular_z'] = angular_speed * 0.8  # Positive = left spin
+            # Simple left spin - gentle speed
+            base_command['angular_z'] = angular_speed * 0.6  # Reduced for smoother motion
             
         elif movement_type == 'spin_right':
-            # Simple right spin  
-            base_command['angular_z'] = -angular_speed * 0.8  # Negative = right spin
+            # Simple right spin - gentle speed
+            base_command['angular_z'] = -angular_speed * 0.6  # Reduced for smoother motion
             
         elif movement_type == 'quarter_circle_left':
             # Gentle left quarter turn (90 degrees)
-            base_command['angular_z'] = angular_speed * 0.4  # Slower for precision
+            base_command['angular_z'] = angular_speed * 0.3  # Much slower for precision
             
         elif movement_type == 'quarter_circle_right':
             # Gentle right quarter turn (90 degrees)
-            base_command['angular_z'] = -angular_speed * 0.4  # Slower for precision
+            base_command['angular_z'] = -angular_speed * 0.3  # Much slower for precision
             
         elif movement_type == 'half_circle_left':
             # Left half circle (180 degrees)
-            base_command['angular_z'] = angular_speed * 0.7  # Medium speed
+            base_command['angular_z'] = angular_speed * 0.5  # Reduced medium speed
             
         elif movement_type == 'half_circle_right':
             # Right half circle (180 degrees)
-            base_command['angular_z'] = -angular_speed * 0.7  # Medium speed
+            base_command['angular_z'] = -angular_speed * 0.5  # Reduced medium speed
             
         elif movement_type == 'full_circle_left':
-            # Full left circle (360 degrees)
-            base_command['angular_z'] = angular_speed  # Full speed for complete rotation
+            # Full left circle (360 degrees) - still energetic but controlled
+            base_command['angular_z'] = angular_speed * 0.8  # Reduced from full speed
             
         elif movement_type == 'full_circle_right':
-            # Full right circle (360 degrees)
-            base_command['angular_z'] = -angular_speed  # Full speed for complete rotation
+            # Full right circle (360 degrees) - still energetic but controlled
+            base_command['angular_z'] = -angular_speed * 0.8  # Reduced from full speed
             
         elif movement_type == 'spin_burst':
-            # EXPLOSIVE random spinning - multiple direction changes
-            burst_intensity = 1.0
+            # Dynamic random spinning - controlled intensity
+            burst_intensity = 0.8  # Reduced base intensity  
             if onset > 0.8:
-                burst_intensity = 1.2  # Even more intense for very strong beats
+                burst_intensity = 1.0  # Less aggressive boost for strong beats
             
-            # Random explosive spin moves - PURE ROTATION ONLY!
+            # Random dynamic spin moves - PURE ROTATION ONLY!
             spin_moves = [
-                {'angular_z': angular_speed * burst_intensity},  # FAST left spin
-                {'angular_z': -angular_speed * burst_intensity},  # FAST right spin
-                {'angular_z': angular_speed * burst_intensity * 0.7},  # Medium left spin
-                {'angular_z': -angular_speed * burst_intensity * 0.7},  # Medium right spin
-                {'angular_z': angular_speed * burst_intensity * 1.2},  # SUPER FAST left (if within limits)
-                {'angular_z': -angular_speed * burst_intensity * 1.2},  # SUPER FAST right (if within limits)
+                {'angular_z': angular_speed * burst_intensity * 0.7},  # Controlled left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.7},  # Controlled right spin
+                {'angular_z': angular_speed * burst_intensity * 0.5},  # Gentle left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.5},  # Gentle right spin
+                {'angular_z': angular_speed * burst_intensity * 0.9},  # Medium left spin
+                {'angular_z': -angular_speed * burst_intensity * 0.9},  # Medium right spin
             ]
             
             # Choose random spin direction and intensity
             chosen_spin = random.choice(spin_moves)
             
-            # Apply speed limits
-            chosen_spin['angular_z'] = max(-3.0, min(3.0, chosen_spin['angular_z']))
+            # Apply gentler speed limits  
+            chosen_spin['angular_z'] = max(-1.5, min(1.5, chosen_spin['angular_z']))
             
             base_command.update(chosen_spin)
             
@@ -615,43 +617,44 @@ class AdvancedDanceNode(Node):
         onset = features['onset_strength']
         
         # Subtle SPINNING ONLY - NO LINEAR MOVEMENT for arm complementing
-        angular_speed = min(1.5, energy * 0.6)  # Gentler rotation for arm complement
+        # VERY GENTLE complement speeds - should barely be noticeable
+        angular_speed = min(0.8, energy * 0.3)  # Much gentler rotation for arm complement
         
         # Apply tempo scaling
         angular_speed *= tempo_scale
         
-        # Cap the speeds
-        angular_speed = min(1.5, angular_speed)
+        # Cap the speeds - very low for subtle complement
+        angular_speed = min(0.8, angular_speed)  # Max 0.8 rad/s for subtle movements
         
         # 🚨 CRITICAL: ZERO LINEAR MOVEMENT - ONLY SUBTLE SPINS! 🚨
         # This GUARANTEES robot stays in 50cm constraint space!
         base_command = {'linear_x': 0.0, 'linear_y': 0.0, 'angular_z': 0.0}
         
-        # Add subtle SPINNING movements based on arm movement type
+        # Add very subtle SPINNING movements based on arm movement type
         if movement_type in ['powerful_strike', 'dramatic_sweep']:
-            # Subtle rotation during dramatic arm movements
+            # Very subtle rotation during dramatic arm movements
             direction = 1 if onset > 0.5 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.4
+            base_command['angular_z'] = direction * angular_speed * 0.2  # Much more subtle
             
         elif movement_type in ['energetic_wave', 'bright_sparkle']:
-            # Gentle spins during energetic arm movements
+            # Barely noticeable spins during energetic arm movements
             direction = 1 if energy > 1.0 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.3
+            base_command['angular_z'] = direction * angular_speed * 0.15  # Very gentle
             
         elif movement_type in ['flowing_reach', 'subtle_sway']:
-            # Very gentle rotation during flowing arms
+            # Extremely gentle rotation during flowing arms
             direction = 1 if onset > 0.4 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.2
+            base_command['angular_z'] = direction * angular_speed * 0.1  # Minimal movement
             
         elif movement_type == 'deep_pulse':
-            # Slight rotation to match arm pulses
+            # Very slight rotation to match arm pulses
             direction = 1 if onset > 0.5 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.25
+            base_command['angular_z'] = direction * angular_speed * 0.12  # Reduced
                 
         elif movement_type == 'gentle_wave':
-            # Minimal rotation to complement gentle arm waves
+            # Almost imperceptible rotation to complement gentle arm waves
             direction = 1 if features['brightness'] > 1.0 else -1
-            base_command['angular_z'] = direction * angular_speed * 0.15
+            base_command['angular_z'] = direction * angular_speed * 0.08  # Barely noticeable
             
         return base_command
 
@@ -862,8 +865,8 @@ class AdvancedDanceNode(Node):
                 stop_twist.angular.z = 0.0
                 
                 for i in range(5):
-                    print(f"🛑 S-key stop command {i+1}/5")
-                    self.cmd_vel_pub.publish(stop_twist)
+                    print(f"🛑 S-key stop command {i+1}/5 to BOTH robots")
+                    self.publish_wheel_command_to_both_robots(stop_twist)
                     time.sleep(1.0)
                 
                 self.emergency_stop()
@@ -1025,12 +1028,13 @@ class AdvancedDanceNode(Node):
             # PURE SPINNING DANCE - Always send wheel commands for synchronized arms + spins
             if buffered_movement['base_msg']:
                 # NO TRACKING NEEDED - PURE SPINNING HAS NO DISPLACEMENT!
-                self.cmd_vel_pub.publish(buffered_movement['base_msg'])
+                # Send to BOTH robots for synchronized spinning
+                self.publish_wheel_command_to_both_robots(buffered_movement['base_msg'])
                 movement_category = buffered_movement['movement_category']
                 if movement_category == 'base':
-                    self.get_logger().debug("🌀 Sent primary spinning dance command")
+                    self.get_logger().debug("🌀 Sent primary spinning dance command to BOTH robots")
                 else:
-                    self.get_logger().debug("🤖 Sent complementary spinning movement with arms")
+                    self.get_logger().debug("🤖 Sent complementary spinning movement with arms to BOTH robots")
             
             # Log execution (optional, can be disabled for even better performance)
             if len(movement_buffer) < 100:  # Only log for shorter performances
@@ -1058,8 +1062,8 @@ class AdvancedDanceNode(Node):
         stop_twist.angular.z = 0.0
         
         for i in range(3):
-            self.get_logger().info(f"🛑 Performance end stop command {i+1}/3")
-            self.cmd_vel_pub.publish(stop_twist)
+            self.get_logger().info(f"🛑 Performance end stop command {i+1}/3 to BOTH robots")
+            self.publish_wheel_command_to_both_robots(stop_twist)
             time.sleep(1.0)
         
         # Wait a moment then return to home
@@ -1074,8 +1078,8 @@ class AdvancedDanceNode(Node):
         
         # FINAL wheel stop command
         for i in range(3):
-            self.get_logger().info(f"🛑 Final wheel stop {i+1}/3")
-            self.cmd_vel_pub.publish(stop_twist)
+            self.get_logger().info(f"🛑 Final wheel stop {i+1}/3 to BOTH robots")
+            self.publish_wheel_command_to_both_robots(stop_twist)
             time.sleep(1.0)
         
         self.performance_active = False
@@ -1128,6 +1132,11 @@ class AdvancedDanceNode(Node):
             
         return servo_msg, base_msg
 
+    def publish_wheel_command_to_both_robots(self, twist_msg):
+        """Helper function to publish wheel commands to both robot_1 and robot_2"""
+        self.cmd_vel_pub_robot1.publish(twist_msg)
+        self.cmd_vel_pub_robot2.publish(twist_msg)
+    
     def stop_all_movement(self):
         """Stop all servo and base movements immediately"""
         # FORCE STOP BASE MOVEMENTS - send multiple stop commands rapidly
@@ -1136,10 +1145,10 @@ class AdvancedDanceNode(Node):
         stop_twist.linear.y = 0.0
         stop_twist.angular.z = 0.0
         
-        # Send stop commands slowly and repeatedly - 1 per second
+        # Send stop commands slowly and repeatedly - 1 per second to BOTH ROBOTS
         for i in range(5):  # 5 stop commands at 1 second intervals
-            self.get_logger().info(f"🛑 Sending stop command {i+1}/5")
-            self.cmd_vel_pub.publish(stop_twist)
+            self.get_logger().info(f"🛑 Sending stop command {i+1}/5 to BOTH robots")
+            self.publish_wheel_command_to_both_robots(stop_twist)
             time.sleep(1.0)  # 1 second between commands
         
         # FORCE STOP ALL SERVOS - send immediate home command
@@ -1198,8 +1207,8 @@ class AdvancedDanceNode(Node):
             stop_twist.angular.z = 0.0
             
             for j in range(3):  # 3 stop commands per emergency attempt
-                self.get_logger().error(f"🛑 Emergency stop command {j+1}/3 in attempt {emergency_attempt + 1}")
-                self.cmd_vel_pub.publish(stop_twist)
+                self.get_logger().error(f"🛑 Emergency stop command {j+1}/3 in attempt {emergency_attempt + 1} to BOTH robots")
+                self.publish_wheel_command_to_both_robots(stop_twist)
                 time.sleep(1.0)  # 1 second between commands
             
             # Force stop servos immediately
@@ -1220,8 +1229,8 @@ class AdvancedDanceNode(Node):
         stop_twist.angular.z = 0.0
         
         for i in range(5):  # 5 final stop commands
-            self.get_logger().error(f"🛑 Final stop command {i+1}/5")
-            self.cmd_vel_pub.publish(stop_twist)
+            self.get_logger().error(f"🛑 Final stop command {i+1}/5 to BOTH robots")
+            self.publish_wheel_command_to_both_robots(stop_twist)
             time.sleep(1.0)  # 1 second between commands
         
         # Publish emergency stop signal
@@ -1333,8 +1342,8 @@ def main():
                 stop_twist.angular.z = 0.0
                 print("🛑 SENDING STOP COMMANDS - 1 PER SECOND...")
                 for i in range(5):
-                    print(f"🛑 Stop command {i+1}/5")
-                    node.cmd_vel_pub.publish(stop_twist)
+                    print(f"🛑 Stop command {i+1}/5 to BOTH robots")
+                    node.publish_wheel_command_to_both_robots(stop_twist)
                     time.sleep(1.0)  # 1 second delay between commands
                 print("🛑 STOP COMMANDS COMPLETED!")
             
